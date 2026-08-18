@@ -1,0 +1,65 @@
+schema_version = 1
+
+[[dependency]]
+name = "TypeScript"
+version = "5.9.3"
+license = "Apache-2.0"
+source_url = "https://www.npmjs.com/package/typescript"
+purpose = "Web/shared TypeScript compilation"
+risk_level = "low"
+status = "development-only"
+
+[[dependency]]
+name = "Android Gradle Plugin"
+version = "8.6.1"
+license = "Apache-2.0"
+source_url = "https://developer.android.com/build/releases/gradle-plugin"
+purpose = "Android application build"
+risk_level = "low"
+status = "planned-local-build"
+
+[[dependency]]
+name = "Kotlin"
+version = "2.0.21"
+license = "Apache-2.0"
+source_url = "https://github.com/JetBrains/kotlin"
+purpose = "Android application language"
+risk_level = "low"
+status = "planned-local-build"
+
+[[dependency]]
+name = "Jetpack Compose"
+version = "2024.10.01"
+license = "Apache-2.0"
+source_url = "https://developer.android.com/jetpack/compose"
+purpose = "Android UI"
+risk_level = "low"
+status = "planned-local-build"
+
+[[dependency]]
+name = "CameraX"
+version = "1.4.0"
+license = "Apache-2.0"
+source_url = "https://developer.android.com/jetpack/androidx/releases/camera"
+purpose = "Android capture foundation"
+risk_level = "low"
+status = "planned-local-build"
+
+[[dependency]]
+name = "actions/checkout"
+version = "v4"
+license = "MIT"
+source_url = "https://github.com/actions/checkout"
+purpose = "GitHub Actions checkout"
+risk_level = "low"
+status = "ci-only"
+
+[[dependency]]
+name = "actions/setup-node"
+version = "v4"
+license = "MIT"
+source_url = "https://github.com/actions/setup-node"
+purpose = "GitHub Actions Node setup"
+risk_level = "low"
+status = "ci-only"
+
