@@ -218,8 +218,9 @@ class DevMockPerceptionEngine : PerceptionEngine {
 
 object PerceptionEngineFactory {
     fun create(isDebugBuild: Boolean): PerceptionEngine = if (isDebugBuild) {
-        DevMockPerceptionEngine()
+        JniNativePerceptionBridge.createOrNull()?.let(::NativePerceptionEngine) ?: DevMockPerceptionEngine()
     } else {
-        NativePerceptionEngine(UnavailableNativePerceptionBridge())
+        JniNativePerceptionBridge.createOrNull()?.let(::NativePerceptionEngine)
+            ?: NativePerceptionEngine(UnavailableNativePerceptionBridge())
     }
 }

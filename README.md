@@ -1,5 +1,7 @@
 # Wellfriend Scan
 
+MP10 adds real-runtime seams: Android delegates to the Rust C ABI through JNI when a packaged library is present and web delegates to a reviewed WASM module when one is loaded. Missing release runtimes fail closed; test/dev mocks remain visibly non-production.
+
 `wellfriend-scan` is the reference document-scanner product shell for Android, web, and desktop surfaces. It owns product UI, capture lifecycle, user sessions, and export orchestration. It is not a duplicate perception engine: reusable quality, detection, fusion, reconstruction, restoration, and semantic algorithms belong in [`wellfriend-perception`](https://github.com/demisuga01-lab/wellfriend-perception).
 
 `wellfriend-models` supplies validated ONNX artifacts; this repository does not train models or bundle untracked weights.
