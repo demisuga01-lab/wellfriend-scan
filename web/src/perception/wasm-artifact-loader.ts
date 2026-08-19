@@ -60,10 +60,10 @@ export async function loadVerifiedWasmRuntime(baseUrl = "/wasm"): Promise<WasmRu
   // The generated ESM loader is imported only after its local artifact checksum is verified.
   void loader;
   const imported = await import(/* @vite-ignore */ join(baseUrl, "wellfriend_perception.js")) as unknown as {
-    initSync?: (bytes: ArrayBuffer) => unknown;
+    initSync?: (input: unknown) => unknown;
     createEngine?: (configJson?: string) => unknown;
   };
   if (typeof imported.initSync !== "function" || typeof imported.createEngine !== "function") throw new Error("WASM loader exports do not match the runtime contract");
-  imported.initSync(wasm);
+  imported.initSync({ module: wasm });
   return { createEngine: imported.createEngine as WasmRuntimeModule["createEngine"] };
 }

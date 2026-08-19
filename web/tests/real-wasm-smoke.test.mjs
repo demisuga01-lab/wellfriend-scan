@@ -10,7 +10,7 @@ try { await access(resolve(packageRoot, "wellfriend_perception.js")); await acce
 
 test("synced browser WASM package runs scalar analyze smoke", { skip: !packageAvailable && "run scripts/sync-wasm.ps1 before this real-package smoke" }, async () => {
   const module = await import(pathToFileURL(resolve(packageRoot, "wellfriend_perception.js")).href);
-  module.initSync(await readFile(resolve(packageRoot, "wellfriend_perception_bg.wasm")));
+  module.initSync({ module: await readFile(resolve(packageRoot, "wellfriend_perception_bg.wasm")) });
   const engine = module.createEngine("{}");
   const response = JSON.parse(engine.analyzeFrame(new Uint8Array(64), 8, 8, 8, "Gray8", "{}"));
   assert.equal(response.schema_version, 1);
