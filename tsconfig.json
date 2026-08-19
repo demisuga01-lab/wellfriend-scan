@@ -9,6 +9,5 @@
     "lib": ["ES2022", "DOM"],
     "declaration": true
   },
-  "include": ["shared/src/**/*.ts", "web/src/**/*.ts"]
+  "include": ["shared/src/**/*.ts", "web/src/**/*.ts", "desktop/src/**/*.ts"]
 }
-
