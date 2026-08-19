@@ -15,6 +15,11 @@ const required = [
   "android/scanner-core/src/main/kotlin/dev/wellfriend/scan/core/ScanModels.kt",
   "android/scanner-core/src/main/kotlin/dev/wellfriend/scan/core/CoordinateMapping.kt",
   "android/scanner-perception/src/main/kotlin/dev/wellfriend/scan/perception/PerceptionContracts.kt",
+  "android/scanner-perception/src/main/kotlin/dev/wellfriend/scan/perception/NativeRuntimeBridge.kt",
+  "android/scanner-perception/src/main/kotlin/dev/wellfriend/scan/perception/NativeRuntimeArtifactContract.kt",
+  "android/app/src/main/jniLibs/README.md",
+  "android/app/src/main/assets/wellfriend-runtime/android/.gitkeep",
+  "scripts/sync-android-abi.ps1",
   "android/scanner-perception/src/main/kotlin/dev/wellfriend/scan/perception/ScanController.kt",
   "android/scanner-ui/src/main/kotlin/dev/wellfriend/scan/ui/camera/CameraXScannerController.kt",
   "android/scanner-ui/src/main/kotlin/dev/wellfriend/scan/ui/overlay/DocumentOverlay.kt",
@@ -25,6 +30,7 @@ const required = [
 await Promise.all(required.map((path) => access(path)));
 const contractSources = await Promise.all([
   "android/scanner-perception/src/main/kotlin/dev/wellfriend/scan/perception/PerceptionContracts.kt",
+  "android/scanner-perception/src/main/kotlin/dev/wellfriend/scan/perception/NativeRuntimeArtifactContract.kt",
   "android/scanner-perception/src/main/kotlin/dev/wellfriend/scan/perception/ScanController.kt",
   "android/scanner-ui/src/main/kotlin/dev/wellfriend/scan/ui/camera/CameraXScannerController.kt",
   "android/scanner-ui/src/main/kotlin/dev/wellfriend/scan/ui/ScannerApp.kt",
@@ -35,6 +41,7 @@ const contract = Buffer.concat(contractSources).toString("utf8");
 for (const marker of [
   "interface PerceptionEngine",
   "NativePerceptionBridge",
+  "NativeRuntimeArtifactContract",
   "STRATEGY_KEEP_ONLY_LATEST",
   "CaptureReadiness",
   "PreviewCoordinateMapper",

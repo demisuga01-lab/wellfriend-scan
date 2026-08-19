@@ -6,3 +6,8 @@ android/.kotlin/
 android/**/build/
 android/local.properties
 android/app/build/
+android/app/src/main/jniLibs/*/libwellfriend_perception*.so
+android/app/src/main/assets/wellfriend-runtime/android/manifest.json
+android/app/src/main/assets/wellfriend-runtime/android/checksums.json
+web/public/wasm/*
+!web/public/wasm/.gitkeep
