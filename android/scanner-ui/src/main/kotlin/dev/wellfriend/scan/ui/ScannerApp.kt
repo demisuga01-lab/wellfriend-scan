@@ -30,6 +30,8 @@ import dev.wellfriend.scan.core.ScanPage
 import dev.wellfriend.scan.core.ScannerState
 import dev.wellfriend.scan.perception.ScanController
 import dev.wellfriend.scan.perception.ScannerUiState
+import dev.wellfriend.scan.perception.NativeLibraryLoader
+import dev.wellfriend.scan.perception.NativeRuntimeArtifactDiagnostics
 import dev.wellfriend.scan.ui.camera.CameraPreview
 import dev.wellfriend.scan.ui.camera.CameraXScannerController
 import dev.wellfriend.scan.ui.overlay.CaptureGuidancePanel
@@ -206,10 +208,15 @@ private fun FilterRow(active: ScanPage, scanController: ScanController) {
 @Composable
 private fun DebugDiagnostics(state: ScannerUiState) {
     val analysis = state.analysis ?: return
+    val artifact = NativeRuntimeArtifactDiagnostics.snapshot()
     Column(modifier = Modifier.fillMaxWidth().background(Color(0xAA111111)).padding(8.dp)) {
+        Text("Runtime ${analysis.engineMode}: ${NativeLibraryLoader.status.diagnostic}", color = Color.White)
+        Text("Artifact ${artifact.sourceSha ?: "unavailable"} schema ${artifact.schemaVersion ?: "?"}", color = Color.White)
+        Text("Frame rotation ${analysis.rotationDegrees}; mirror ${analysis.mirrored}", color = Color.White)
         Text("Debug · ${analysis.engineMode} · ${analysis.inputSize.width}×${analysis.inputSize.height}", color = Color.White)
         Text("Readiness ${analysis.captureReadiness} ${analysis.captureReadinessScore}", color = Color.White)
         Text("Timings ${analysis.stageTimingsMillis}", color = Color.White)
+        artifact.warning?.let { Text("Artifact warning: $it", color = Color.Yellow) }
         Text(analysis.diagnostics.joinToString(), color = Color.White)
     }
 }

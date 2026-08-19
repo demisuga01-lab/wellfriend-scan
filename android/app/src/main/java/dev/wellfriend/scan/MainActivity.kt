@@ -1,18 +1,19 @@
 package dev.wellfriend.scan
 
 import android.Manifest
-import android.graphics.BitmapFactory
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import dev.wellfriend.scan.core.CaptureMode
-import dev.wellfriend.scan.core.ImageSize
 import dev.wellfriend.scan.export.ExportFormat
 import dev.wellfriend.scan.export.ExportRequest
 import dev.wellfriend.scan.export.ScanExporter
 import dev.wellfriend.scan.perception.PerceptionEngineFactory
+import dev.wellfriend.scan.perception.NativeRuntimeImage
+import dev.wellfriend.scan.perception.NativeRuntimeImageStore
+import dev.wellfriend.scan.perception.NativeRuntimeArtifactDiagnostics
 import dev.wellfriend.scan.perception.ScanController
 import dev.wellfriend.scan.ui.WellfriendScannerApp
 import dev.wellfriend.scan.ui.camera.CameraXScannerController
@@ -25,6 +26,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var scanController: ScanController
     private lateinit var cameraController: CameraXScannerController
     private lateinit var imuHooks: ImuCaptureHooks
+    private val runtimeImages = NativeRuntimeImageStore()
 
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         scanController.onPermissionResult(granted)
@@ -34,14 +36,23 @@ class MainActivity : ComponentActivity() {
         contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         lifecycleScope.launch {
             GalleryImportDecoder(this@MainActivity).decode(uri)
-                .onSuccess { imported -> scanController.importGallery(uri.toString(), imported.sourceSize, imported.frame) }
+                .onSuccess { imported ->
+                    // The scalar bridge consumes this explicit, bounds-checked decoded image. It never reopens an arbitrary URI.
+                    runtimeImages.register(uri.toString(), NativeRuntimeImage.fromFrame(imported.frame))
+                    scanController.importGallery(uri.toString(), imported.frame.size, imported.frame)
+                }
                 .onFailure { scanController.onGalleryImportFailure(it.message ?: "gallery image could not be imported") }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        scanController = ScanController(PerceptionEngineFactory.create(BuildConfig.DEBUG))
+        runCatching {
+            val manifest = assets.open("wellfriend-runtime/android/manifest.json").bufferedReader().use { it.readText() }
+            val checksums = assets.open("wellfriend-runtime/android/checksums.json").bufferedReader().use { it.readText() }
+            NativeRuntimeArtifactDiagnostics.configure(manifest, checksums)
+        }
+        scanController = ScanController(PerceptionEngineFactory.create(BuildConfig.DEBUG, runtimeImages))
         cameraController = CameraXScannerController(
             context = this,
             lifecycleOwner = this,
@@ -88,12 +99,14 @@ class MainActivity : ComponentActivity() {
         cameraController.takeHighResolutionPhoto(
             output = output,
             onSaved = { file ->
-                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeFile(file.path, options)
-                if (options.outWidth <= 0 || options.outHeight <= 0) {
-                    scanController.onCameraFailure("captured image dimensions are invalid")
-                } else {
-                    scanController.onPhotoCaptured(file.toURI().toString(), ImageSize(options.outWidth, options.outHeight))
+                lifecycleScope.launch {
+                    GalleryImportDecoder(this@MainActivity).decodeFile(file)
+                        .onSuccess { captured ->
+                            val uri = file.toURI().toString()
+                            runtimeImages.register(uri, NativeRuntimeImage.fromFrame(captured.frame))
+                            scanController.onPhotoCaptured(uri, captured.frame.size)
+                        }
+                        .onFailure { scanController.onCameraFailure(it.message ?: "captured image could not be decoded") }
                 }
             },
             onError = scanController::onCameraFailure,

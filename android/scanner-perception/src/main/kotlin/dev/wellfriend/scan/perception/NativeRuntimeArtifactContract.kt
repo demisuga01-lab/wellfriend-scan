@@ -25,3 +25,20 @@ object NativeRuntimeArtifactContract {
         sha
     }
 }
+
+/** Process-local, non-sensitive artifact metadata displayed by the product debug panel. */
+data class NativeRuntimeArtifactMetadata(val sourceSha: String?, val schemaVersion: Int?, val warning: String?)
+
+object NativeRuntimeArtifactDiagnostics {
+    @Volatile private var metadata = NativeRuntimeArtifactMetadata(null, null, "native runtime artifact manifest has not been loaded")
+
+    fun configure(manifestJson: String, checksumsJson: String) {
+        metadata = NativeRuntimeArtifactContract.validate(manifestJson, checksumsJson)
+            .fold(
+                onSuccess = { NativeRuntimeArtifactMetadata(it, 1, null) },
+                onFailure = { NativeRuntimeArtifactMetadata(null, null, it.message ?: "native runtime artifact validation failed") },
+            )
+    }
+
+    fun snapshot(): NativeRuntimeArtifactMetadata = metadata
+}

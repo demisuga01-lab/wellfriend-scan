@@ -24,12 +24,15 @@ object NativeLibraryLoader {
  * JNI implementation that delegates all detection, reconstruction, and filtering to the Rust C ABI.
  * The tiny C shim is intentionally the only Android-native code allowed to call `wf_*` functions.
  */
-class JniNativePerceptionBridge private constructor(private val engineHandle: Long) : NativePerceptionBridge, AutoCloseable {
+class JniNativePerceptionBridge private constructor(
+    private val engineHandle: Long,
+    private val runtimeImages: NativeRuntimeImageStore?,
+) : NativePerceptionBridge, AutoCloseable {
     companion object {
-        fun createOrNull(): JniNativePerceptionBridge? {
+        fun createOrNull(runtimeImages: NativeRuntimeImageStore? = null): JniNativePerceptionBridge? {
             if (!NativeLibraryLoader.status.available) return null
             val handle = nativeCreate("{}")
-            return handle.takeIf { it != 0L }?.let(::JniNativePerceptionBridge)
+            return handle.takeIf { it != 0L }?.let { JniNativePerceptionBridge(it, runtimeImages) }
         }
 
         @JvmStatic private external fun nativeCreate(configJson: String): Long
@@ -54,18 +57,27 @@ class JniNativePerceptionBridge private constructor(private val engineHandle: Lo
     }
 
     override suspend fun reconstructPage(request: ReconstructionRequest): ReconstructionResult {
-        throw NativePerceptionUnavailableException(
-            "native reconstruction needs decoded source pixels from the gallery/camera store; request wiring is present but no source-image provider was supplied",
+        val input = images().resolve(request.sourceUri, request.sourceSize)
+        val raw = nativeReconstruct(
+            engineHandle, input.bytes, input.width, input.height, input.stride, input.pixelFormat.runtimeName(),
+            "{\"quad\":{\"points\":[${request.geometry.corners.joinToString { "{\"x\":${it.x},\"y\":${it.y}}" }}]},\"output_long_edge\":${request.outputLongEdge},\"aspect_policy\":\"${request.aspectPolicy}\",\"orientation_policy\":\"${request.orientationPolicy}\",\"crop_margin_policy\":\"${request.cropMarginPolicy}\"}",
         )
+        return NativeJsonMapper.reconstruction(raw, images())
     }
 
     override suspend fun applyFilter(request: FilterRequest): FilterResult {
-        throw NativePerceptionUnavailableException(
-            "native filtering needs decoded canonical pixels from the page store; request wiring is present but no source-image provider was supplied",
+        val input = images().resolve(request.inputUri)
+        val raw = nativeApplyFilter(
+            engineHandle, input.bytes, input.width, input.height, input.stride, input.pixelFormat.runtimeName(),
+            "{\"preset\":\"${request.preset.runtimeName()}\"}",
         )
+        return NativeJsonMapper.filter(raw, images())
     }
 
     override fun close() = nativeDestroy(engineHandle)
+
+    private fun images(): NativeRuntimeImageStore = runtimeImages
+        ?: throw NativePerceptionUnavailableException("native reconstruction/filter requires an explicitly registered decoded image store")
 }
 
 /** Strict, dependency-free mapper for the bounded MP10 runtime JSON schema. */
@@ -97,6 +109,53 @@ object NativeJsonMapper {
         )
     }
 
+    fun reconstruction(json: String, images: NativeRuntimeImageStore): ReconstructionResult {
+        rejectError(json)
+        val image = runtimeImage(json)
+        return ReconstructionResult(
+            outputUri = images.registerOutput(image),
+            outputSize = image.size(),
+            diagnostics = strings(json, "diagnostics") + "native_scalar_reconstruction",
+            confidence = number(json, "confidence") ?: 0f,
+            engineMode = PerceptionEngineMode.NATIVE,
+        )
+    }
+
+    fun filter(json: String, images: NativeRuntimeImageStore): FilterResult {
+        rejectError(json)
+        val image = runtimeImage(json)
+        return FilterResult(
+            outputUri = images.registerOutput(image),
+            appliedProcessorIds = strings(json, "applied_processor_ids"),
+            diagnostics = strings(json, "diagnostics") + "native_scalar_filter",
+            engineMode = PerceptionEngineMode.NATIVE,
+        )
+    }
+
+    private fun rejectError(json: String) {
+        if (json.contains("\"error\"")) throw NativePerceptionUnavailableException(string(json, "message") ?: "native perception returned an error")
+    }
+
+    private fun runtimeImage(json: String): NativeRuntimeImage {
+        val imageJson = Regex("\\\"image\\\"\\s*:\\s*\\{(.*?)\\}", RegexOption.DOT_MATCHES_ALL).find(json)?.groupValues?.get(1)
+            ?: throw NativePerceptionUnavailableException("native runtime image payload is missing")
+        val width = number(imageJson, "width")?.toInt() ?: throw NativePerceptionUnavailableException("runtime image width is missing")
+        val height = number(imageJson, "height")?.toInt() ?: throw NativePerceptionUnavailableException("runtime image height is missing")
+        val stride = number(imageJson, "stride")?.toInt() ?: throw NativePerceptionUnavailableException("runtime image stride is missing")
+        val pixelFormat = string(imageJson, "pixel_format")?.let { runCatching { PerceptionPixelFormat.valueOf(it.uppercase()) }.getOrNull() }
+            ?: throw NativePerceptionUnavailableException("runtime image pixel format is invalid")
+        val bytesText = Regex("\\\"bytes\\\"\\s*:\\s*\\[([^]]*)]", RegexOption.DOT_MATCHES_ALL).find(imageJson)?.groupValues?.get(1)
+            ?: throw NativePerceptionUnavailableException("runtime image bytes are missing")
+        if (bytesText.length > MAX_NATIVE_RUNTIME_IMAGE_BYTES * 4) {
+            throw NativePerceptionUnavailableException("runtime image JSON exceeds mobile cache limit")
+        }
+        val byteValues = if (bytesText.isBlank()) emptyList() else bytesText.split(',').map { token ->
+            token.trim().toIntOrNull()?.takeIf { it in 0..255 }
+                ?: throw NativePerceptionUnavailableException("runtime image byte is invalid")
+        }
+        return NativeRuntimeImage(width, height, stride, pixelFormat, ByteArray(byteValues.size) { byteValues[it].toByte() })
+    }
+
     private fun string(json: String, key: String): String? =
         Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"").find(json)?.groupValues?.get(1)
 
@@ -124,4 +183,17 @@ private fun PerceptionPixelFormat.runtimeName(): String = when (this) {
     PerceptionPixelFormat.BGR8 -> "Bgr8"
     PerceptionPixelFormat.RGBA8 -> "Rgba8"
     PerceptionPixelFormat.YUV420 -> throw NativePerceptionUnavailableException("MP10 native scalar ABI accepts converted Gray8/Rgb8/Bgr8/Rgba8 frames, not YUV420 planes")
+}
+
+internal fun FilterPreset.runtimeName(): String = when (this) {
+    FilterPreset.ORIGINAL -> "Original"
+    FilterPreset.AUTO -> "Auto"
+    FilterPreset.CLEAN -> "Clean"
+    FilterPreset.COLOR -> "Color"
+    FilterPreset.GRAYSCALE -> "Grayscale"
+    FilterPreset.BLACK_AND_WHITE -> "B&W"
+    FilterPreset.RECEIPT -> "Receipt"
+    FilterPreset.BOOK -> "Book"
+    FilterPreset.WHITEBOARD -> "Whiteboard"
+    FilterPreset.PHOTO_DOCUMENT -> "PhotoDocument"
 }

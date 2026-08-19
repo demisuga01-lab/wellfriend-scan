@@ -1,6 +1,7 @@
 package dev.wellfriend.scan.ui.camera
 
 import android.content.Context
+import android.graphics.Rect
 import android.view.Surface
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
@@ -116,7 +117,11 @@ class CameraXScannerController(
             .also { useCase ->
                 useCase.setAnalyzer(cameraExecutor) { proxy ->
                     val frame = try {
-                        ImageProxyFrameConverter.copyForAnalysis(proxy, frameIds.incrementAndGet())
+                        ImageProxyFrameConverter.copyForAnalysis(
+                            proxy,
+                            frameIds.incrementAndGet(),
+                            mirrored = lensFacing == CameraSelector.LENS_FACING_FRONT,
+                        )
                     } finally {
                         proxy.close()
                     }
@@ -133,24 +138,55 @@ class CameraXScannerController(
     }
 }
 
-/** Copies luma to a compact Gray8 DTO before ImageProxy is closed; conversion is not detector logic. */
+/** Copies a crop-aware luma image to compact Gray8 before ImageProxy is closed. */
 object ImageProxyFrameConverter {
-    fun copyForAnalysis(proxy: ImageProxy, frameId: Long): PerceptionFrame? {
+    fun copyForAnalysis(proxy: ImageProxy, frameId: Long, mirrored: Boolean): PerceptionFrame? {
         val plane = proxy.planes.firstOrNull() ?: return null
         val source = plane.buffer.duplicate()
+        source.rewind()
         if (!source.hasRemaining()) return null
-        val bytes = ByteArray(source.remaining())
-        source.get(bytes)
+        val rawBytes = ByteArray(source.remaining())
+        source.get(rawBytes)
+        val crop = proxy.cropRect
+        val compact = runCatching {
+            LumaPlaneExtractor.compact(
+                rawBytes,
+                rowStride = plane.rowStride,
+                pixelStride = plane.pixelStride,
+                crop = crop,
+            )
+        }.getOrNull() ?: return null
         return PerceptionFrame(
             frameId = frameId,
             timestampMillis = System.currentTimeMillis(),
-            size = ImageSize(proxy.width, proxy.height),
+            size = ImageSize(crop.width(), crop.height()),
             rotationDegrees = proxy.imageInfo.rotationDegrees,
             pixelFormat = PerceptionPixelFormat.GRAY8,
-            rowStrideBytes = plane.rowStride,
-            bytes = bytes,
+            rowStrideBytes = crop.width(),
+            bytes = compact,
             source = "camera",
-            mirrored = false,
+            mirrored = mirrored,
         )
+    }
+}
+
+/** Pure copy logic: coordinates sent to Rust are exactly the compact crop pixels shown by overlay mapping. */
+object LumaPlaneExtractor {
+    fun compact(source: ByteArray, rowStride: Int, pixelStride: Int, crop: Rect): ByteArray =
+        compact(source, rowStride, pixelStride, crop.left, crop.top, crop.width(), crop.height())
+
+    /** Android-free overload used by host tests to calibrate CameraX luma/crop coordinates. */
+    fun compact(source: ByteArray, rowStride: Int, pixelStride: Int, left: Int, top: Int, width: Int, height: Int): ByteArray {
+        require(rowStride > 0 && pixelStride > 0) { "invalid luma plane stride" }
+        require(width > 0 && height > 0 && left >= 0 && top >= 0) { "invalid camera crop" }
+        val last = (top + height - 1) * rowStride + (left + width - 1) * pixelStride
+        require(last in source.indices) { "camera crop exceeds luma plane" }
+        return ByteArray(width * height).also { output ->
+            var write = 0
+            repeat(height) { row ->
+                val rowStart = (top + row) * rowStride + left * pixelStride
+                repeat(width) { column -> output[write++] = source[rowStart + column * pixelStride] }
+            }
+        }
     }
 }

@@ -217,10 +217,10 @@ class DevMockPerceptionEngine : PerceptionEngine {
 }
 
 object PerceptionEngineFactory {
-    fun create(isDebugBuild: Boolean): PerceptionEngine = if (isDebugBuild) {
-        JniNativePerceptionBridge.createOrNull()?.let(::NativePerceptionEngine) ?: DevMockPerceptionEngine()
+    fun create(isDebugBuild: Boolean, runtimeImages: NativeRuntimeImageStore? = null): PerceptionEngine = if (isDebugBuild) {
+        JniNativePerceptionBridge.createOrNull(runtimeImages)?.let(::NativePerceptionEngine) ?: DevMockPerceptionEngine()
     } else {
-        JniNativePerceptionBridge.createOrNull()?.let(::NativePerceptionEngine)
+        JniNativePerceptionBridge.createOrNull(runtimeImages)?.let(::NativePerceptionEngine)
             ?: NativePerceptionEngine(UnavailableNativePerceptionBridge())
     }
 }
