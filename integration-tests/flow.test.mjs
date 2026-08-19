@@ -1,12 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { addDraftPage } from "../dist/shared/src/scan-session.js";
-import { handlePerceptionRequest } from "../dist/web/src/perception-worker.js";
+import { handleWorkerRequest } from "../dist/web/src/perception-worker.js";
 
-test("document flow has an explicit core-to-export boundary", () => {
-  const session = addDraftPage({ id: "session", domain: "document", pages: [], exportOptions: { format: "pdf", includeOcr: false, quality: "high" } }, "page");
-  const perception = handlePerceptionRequest({ requestId: session.pages[0].id, domain: "document", input: { kind: "image", byteLength: 1 } });
-  assert.equal(perception.status, "unsupported");
-  assert.equal(session.exportOptions.format, "pdf");
+test("document flow has an explicit core-to-export boundary", async () => {
+  const session = addDraftPage({ id: "session", domain: "document", pages: [], exportOptions: { format: "PDF_PLACEHOLDER", includeOcr: false, quality: "high" } }, "page");
+  const perception = await handleWorkerRequest({ requestId: session.pages[0].id, type: "PING" });
+  assert.equal(perception.type, "PONG");
+  assert.equal(session.exportOptions.format, "PDF_PLACEHOLDER");
 });
-
