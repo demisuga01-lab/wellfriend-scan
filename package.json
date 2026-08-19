@@ -9,6 +9,7 @@
     "serve:web": "node tools/serve-web.mjs",
     "test": "npm run build:web && node --test web/tests/*.test.mjs shared/tests/*.test.mjs desktop/tests/*.test.mjs integration-tests/*.test.mjs",
     "verify:web-desktop-contract": "node tools/verify-web-desktop-layout.mjs",
+    "verify:ecosystem": "node tools/verify-ecosystem-compatibility.mjs",
     "verify:android-contract": "node tools/verify-android-layout.mjs",
     "verify:dependencies": "node tools/verify-dependency-register.mjs"
   },

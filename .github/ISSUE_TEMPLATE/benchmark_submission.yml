@@ -1,0 +1,5 @@
+name: Benchmark submission
+description: Reproducible scanner measurement
+body:
+  - type: textarea
+    attributes: { label: Fixtures, device/browser, commands, metrics, and limitations }
