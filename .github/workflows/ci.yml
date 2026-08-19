@@ -15,4 +15,5 @@ jobs:
       - run: npm run build:web
       - run: npm test
       - run: npm run verify:android-contract
+      - run: npm run verify:web-desktop-contract
       - run: npm run verify:dependencies

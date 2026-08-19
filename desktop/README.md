@@ -1,3 +1,3 @@
-# Desktop placeholder
+# Wellfriend Scan Desktop
 
-MP7 deliberately does not implement desktop capture/UI. MP8 will select and implement a desktop surface while keeping session, export, and perception contracts platform-neutral.
+MP8 provides a tested, lightweight desktop host-workflow contract for local image files and folders. It deliberately does not package Electron/Tauri or duplicate perception algorithms. See `docs/` for shell options and the local file/folder boundary.

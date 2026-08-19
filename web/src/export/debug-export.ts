@@ -1,0 +1,6 @@
+import type { ExportFormat, ScanSession } from "../../../shared/src/scan-session.js";
+export interface WebExportRequest { readonly session: ScanSession; readonly format: ExportFormat; }
+export interface WebExportResult { readonly format: ExportFormat; readonly blob?: Blob; readonly diagnostics: readonly string[]; }
+export function validateExport(request: WebExportRequest): void { if (request.session.pages.length === 0) throw new Error("at least one scan page is required for export"); }
+export function debugSessionJson(session: ScanSession): string { return JSON.stringify({ schema_version: 1, session_id: session.id, domain: session.domain, pages: session.pages.map((page) => ({ id: page.id, source_uri: page.sourceUri, filter: page.filter, rotation_degrees: page.rotationDegrees, geometry_source: page.manualGeometry?.source ?? page.detectedGeometry?.source ?? "none" })) }, null, 2); }
+export function exportDebugJson(request: WebExportRequest): WebExportResult { validateExport(request); if (request.format !== "JSON_DEBUG") throw new Error("only JSON_DEBUG export is implemented in MP8"); return { format: request.format, blob: new Blob([debugSessionJson(request.session)], { type: "application/json" }), diagnostics: ["debug session metadata only; images, OCR, and PDF are not exported"] }; }
