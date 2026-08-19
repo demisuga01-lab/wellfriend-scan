@@ -1,18 +1,21 @@
 # Wellfriend Scan
 
-`wellfriend-scan` is the reference document-scanner product shell for Android, web, and later desktop surfaces. It owns product UI, capture lifecycle, user sessions, and export orchestration. It is not a duplicate perception engine: reusable quality, detection, fusion, reconstruction, restoration, and semantic algorithms belong in [`wellfriend-perception`](https://github.com/wellfriend/wellfriend-perception).
+`wellfriend-scan` is the reference document-scanner product shell for Android, web, and desktop surfaces. It owns product UI, capture lifecycle, user sessions, and export orchestration. It is not a duplicate perception engine: reusable quality, detection, fusion, reconstruction, restoration, and semantic algorithms belong in [`wellfriend-perception`](https://github.com/demisuga01-lab/wellfriend-perception).
 
 `wellfriend-models` supplies validated ONNX artifacts; this repository does not train models or bundle untracked weights.
 
 ## Build and test
 
 ```powershell
-npm install
+npm ci
 npm run build:web
+npm run serve:web
 npm test
 npm run verify:android-contract
+npm run verify:web-desktop-contract
+npm run verify:dependencies
 ```
 
-The MP1 Android Gradle project is intentionally a source/build-boundary skeleton. It requires a local Android SDK plus Gradle 8.6.1 (or a generated wrapper) and JDK 17 to run `./gradlew :app:assembleDebug`; this bootstrap environment has neither the Android SDK nor Gradle, so an Android binary is not claimed as built. See [android/README.md](android/README.md).
+The Android reference app requires a local Android SDK, JDK 17, and Gradle 8.7+ (or a generated wrapper). See [android/README.md](android/README.md).
 
-Current status: MP7 adds a modular Android reference scanner with CameraX ownership, host-testable session/controller logic, live coordinate-safe overlays, crop editing, gallery guardrails, filter/reconstruction binding requests, and debug JSON export. It does not bundle native perception yet: production binding is a fail-closed JNI/C ABI seam while the debug mock is test/dev-only. No ML Kit scanner dependency is required. See [android/README.md](android/README.md) and `android/docs/`.
+Current status: MP7 adds the modular Android reference scanner. MP8 adds a browser scanner with safe import, optional webcam, worker transport, canvas crop/overlay, shared sessions, diagnostics, and debug JSON export; it also adds a tested desktop local file/folder workflow contract. Web production perception is a fail-closed WASM seam while the current browser worker mock is test/dev-only. No ML Kit scanner dependency is required. See [android/README.md](android/README.md), [web/README.md](web/README.md), and [desktop/README.md](desktop/README.md).
