@@ -7,7 +7,8 @@
   "scripts": {
     "build:web": "tsc -p tsconfig.json",
     "test": "npm run build:web && node --test web/tests/*.test.mjs shared/tests/*.test.mjs integration-tests/*.test.mjs",
-    "verify:android-contract": "node tools/verify-android-layout.mjs"
+    "verify:android-contract": "node tools/verify-android-layout.mjs",
+    "verify:dependencies": "node tools/verify-dependency-register.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3"
