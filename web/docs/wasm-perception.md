@@ -4,4 +4,4 @@
 
 `WorkerPerceptionEngine.loadWasm()` uses `LOAD_WASM`, `ENGINE_READY`, and `ENGINE_FAILED`. A worker may report ready only for a reviewed `WASM` engine. Missing WASM fails closed; `DevMockPerceptionEngine` is allowed only in tests or explicitly marked dev tooling.
 
-MP10 validates the Rust WASM target but does not publish a web package or assert browser latency.
+MP10B builds a local/CI browser package with source-SHA manifest and checksums, then the worker validates and loads it from `/wasm`. It does not assert browser latency, camera behavior, or scanner quality.

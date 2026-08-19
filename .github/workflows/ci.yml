@@ -18,3 +18,4 @@ jobs:
       - run: npm run verify:web-desktop-contract
       - run: npm run verify:ecosystem
       - run: npm run verify:dependencies
+      - run: npm run verify:runtime-artifacts
