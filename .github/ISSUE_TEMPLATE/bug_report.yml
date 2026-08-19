@@ -1,0 +1,5 @@
+name: Bug report
+description: Reproducible scanner product defect
+body:
+  - type: textarea
+    attributes: { label: Reproduction, platform, and impact }
