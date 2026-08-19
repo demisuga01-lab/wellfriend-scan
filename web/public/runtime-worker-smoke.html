@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Wellfriend real WASM worker smoke</title>
+<pre id="result">Loading packaged WASM…</pre>
+<script type="module">
+  import { WorkerPerceptionEngine } from "/web/src/perception/worker-engine.js";
+  const output = document.querySelector("#result");
+  const worker = new Worker("/web/src/worker-entry.js", { type: "module" });
+  const engine = new WorkerPerceptionEngine(worker);
+  try {
+    await engine.loadWasm();
+    const pixels = new Uint8Array(64);
+    for (let y = 1; y < 7; y++) for (let x = 1; x < 7; x++) pixels[y * 8 + x] = 240;
+    const sourceUri = "runtime-smoke://fixture";
+    await engine.registerSourceImage(sourceUri, { width: 8, height: 8, stride: 8, pixelFormat: "Gray8", bytes: pixels });
+    const result = await engine.analyzeFrame({ frameId: "1", timestampMillis: Date.now(), size: { width: 8, height: 8 }, rotationDegrees: 0, mimeType: "application/octet-stream", bytes: pixels.buffer, source: "upload", mirrored: false });
+    output.textContent = JSON.stringify({ runtime: result.engineMode, guidance: result.guidance, diagnostics: result.diagnostics }, null, 2);
+  } catch (error) {
+    output.textContent = `FAIL: ${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    engine.dispose();
+  }
+</script>
