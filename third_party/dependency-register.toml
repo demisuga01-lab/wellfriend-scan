@@ -107,7 +107,7 @@ source_url = "https://kotlinlang.org/api/core/kotlin-test/"
 purpose = "Host JVM unit and integration tests"
 risk_level = "low"
 status = "planned-local-build"
-used_by = "scanner-core,scanner-perception,scanner-export,scanner-testing"
+used_by = "scanner-core,scanner-perception,scanner-export,scanner-testing,scanner-ui"
 scope = "dev"
 
 [[dependency]]
