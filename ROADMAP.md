@@ -1,4 +1,7 @@
 # Roadmap
 
-MP1 creates shared state, web worker, and Android app boundaries. MP2 connects the first document capture flow to a versioned `wellfriend-perception` binding. Later milestones add gallery import, multi-page sessions, filters, OCR, PDF export, and cross-platform integration tests.
+## MP7 — Android reference scanner
 
+Implemented: modular Kotlin/Compose app boundaries, CameraX preview/analysis/capture ownership, permission/gallery contracts, `PerceptionEngine` binding seam, controller/session state machine, coordinate mapping, crop flow, filters/reconstruction requests, diagnostics, debug JSON export, and host test structure.
+
+Deferred: the published wellfriend-perception Android ABI, production model inference, OCR, PDF generation, real-device instrumentation, and full camera crop-transform calibration.

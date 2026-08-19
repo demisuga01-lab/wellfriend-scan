@@ -15,5 +15,4 @@ npm run verify:android-contract
 
 The MP1 Android Gradle project is intentionally a source/build-boundary skeleton. It requires a local Android SDK plus Gradle 8.6.1 (or a generated wrapper) and JDK 17 to run `./gradlew :app:assembleDebug`; this bootstrap environment has neither the Android SDK nor Gradle, so an Android binary is not claimed as built. See [android/README.md](android/README.md).
 
-Current status: shared scanner state and the TypeScript worker contract are tested; Android has buildable source/module boundaries pending SDK-backed validation. License: Apache-2.0; planned dependencies are tracked in `third_party/dependency-register.toml`.
-
+Current status: MP7 adds a modular Android reference scanner with CameraX ownership, host-testable session/controller logic, live coordinate-safe overlays, crop editing, gallery guardrails, filter/reconstruction binding requests, and debug JSON export. It does not bundle native perception yet: production binding is a fail-closed JNI/C ABI seam while the debug mock is test/dev-only. No ML Kit scanner dependency is required. See [android/README.md](android/README.md) and `android/docs/`.

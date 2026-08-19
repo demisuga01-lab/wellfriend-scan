@@ -8,6 +8,8 @@ source_url = "https://www.npmjs.com/package/typescript"
 purpose = "Web/shared TypeScript compilation"
 risk_level = "low"
 status = "development-only"
+used_by = "web,shared"
+scope = "dev"
 
 [[dependency]]
 name = "Android Gradle Plugin"
@@ -17,6 +19,8 @@ source_url = "https://developer.android.com/build/releases/gradle-plugin"
 purpose = "Android application build"
 risk_level = "low"
 status = "planned-local-build"
+used_by = "android"
+scope = "base"
 
 [[dependency]]
 name = "Kotlin"
@@ -26,6 +30,8 @@ source_url = "https://github.com/JetBrains/kotlin"
 purpose = "Android application language"
 risk_level = "low"
 status = "planned-local-build"
+used_by = "android,scanner-core,scanner-perception,scanner-export,scanner-testing"
+scope = "base"
 
 [[dependency]]
 name = "Jetpack Compose"
@@ -35,6 +41,8 @@ source_url = "https://developer.android.com/jetpack/compose"
 purpose = "Android UI"
 risk_level = "low"
 status = "planned-local-build"
+used_by = "android-app,scanner-ui"
+scope = "base"
 
 [[dependency]]
 name = "CameraX"
@@ -44,6 +52,74 @@ source_url = "https://developer.android.com/jetpack/androidx/releases/camera"
 purpose = "Android capture foundation"
 risk_level = "low"
 status = "planned-local-build"
+used_by = "scanner-ui"
+scope = "base"
+
+[[dependency]]
+name = "AndroidX Activity"
+version = "1.9.3"
+license = "Apache-2.0"
+source_url = "https://developer.android.com/jetpack/androidx/releases/activity"
+purpose = "Compose activity and Android activity-result contracts"
+risk_level = "low"
+status = "planned-local-build"
+used_by = "android-app,scanner-ui"
+scope = "base"
+
+[[dependency]]
+name = "AndroidX Core"
+version = "1.15.0"
+license = "Apache-2.0"
+source_url = "https://developer.android.com/jetpack/androidx/releases/core"
+purpose = "CameraX main-thread executor support"
+risk_level = "low"
+status = "planned-local-build"
+used_by = "scanner-ui"
+scope = "base"
+
+[[dependency]]
+name = "AndroidX Lifecycle"
+version = "2.8.7"
+license = "Apache-2.0"
+source_url = "https://developer.android.com/jetpack/androidx/releases/lifecycle"
+purpose = "Camera lifecycle ownership and lifecycle coroutine scope"
+risk_level = "low"
+status = "planned-local-build"
+used_by = "android-app,scanner-ui"
+scope = "base"
+
+[[dependency]]
+name = "Kotlin Coroutines"
+version = "1.9.0"
+license = "Apache-2.0"
+source_url = "https://github.com/Kotlin/kotlinx.coroutines"
+purpose = "Non-blocking frame analysis and host state flow"
+risk_level = "low"
+status = "planned-local-build"
+used_by = "android-app,scanner-core,scanner-perception,scanner-ui,scanner-testing"
+scope = "base"
+
+[[dependency]]
+name = "Kotlin Test"
+version = "2.0.21"
+license = "Apache-2.0"
+source_url = "https://kotlinlang.org/api/core/kotlin-test/"
+purpose = "Host JVM unit and integration tests"
+risk_level = "low"
+status = "planned-local-build"
+used_by = "scanner-core,scanner-perception,scanner-export,scanner-testing"
+scope = "dev"
+
+[[dependency]]
+name = "Gradle"
+version = "8.7"
+license = "Apache-2.0"
+source_url = "https://gradle.org/releases/"
+purpose = "Local Android build tool"
+risk_level = "low"
+status = "planned-local-build"
+used_by = "android"
+scope = "planned"
 
 [[dependency]]
 name = "actions/checkout"
@@ -53,6 +129,8 @@ source_url = "https://github.com/actions/checkout"
 purpose = "GitHub Actions checkout"
 risk_level = "low"
 status = "ci-only"
+used_by = "github-actions"
+scope = "ci"
 
 [[dependency]]
 name = "actions/setup-node"
@@ -62,4 +140,5 @@ source_url = "https://github.com/actions/setup-node"
 purpose = "GitHub Actions Node setup"
 risk_level = "low"
 status = "ci-only"
-
+used_by = "github-actions"
+scope = "ci"
