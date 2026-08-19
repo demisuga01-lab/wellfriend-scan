@@ -1,0 +1,5 @@
+name: Feature request
+description: Bounded product capability
+body:
+  - type: textarea
+    attributes: { label: Problem, platform, and perception contract impact }

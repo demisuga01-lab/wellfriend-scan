@@ -1,0 +1,5 @@
+name: Model artifact review
+description: Review an artifact before a product adapter can use it
+body:
+  - type: textarea
+    attributes: { label: Manifest, hashes, license, provenance, and runtime evidence }
