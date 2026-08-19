@@ -1,4 +1,3 @@
 # Web scanner skeleton
 
-TypeScript defines the product-side worker protocol. Future workers load a versioned WASM binding to `wellfriend-perception` and an ONNX Runtime Web adapter; MP1 returns an explicit unsupported result until those verified binaries exist.
-
+MP7 deliberately does not expand the web scanner. MP8 owns web/desktop implementation. Shared scanner state remains platform-neutral; web must consume the same Wellfriend perception artifact/binding contracts rather than copy Android or Rust algorithms.

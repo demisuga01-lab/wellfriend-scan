@@ -11,4 +11,8 @@ dependencyResolutionManagement {
 }
 rootProject.name = "wellfriend-scan-android"
 include(":app")
-
+include(":scanner-core")
+include(":scanner-perception")
+include(":scanner-ui")
+include(":scanner-export")
+include(":scanner-testing")

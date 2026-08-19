@@ -1,6 +1,7 @@
-# Android scanner skeleton
+# Wellfriend Scan Android
 
-The Android app owns Kotlin/Compose UI, CameraX/Camera2 capture, permissions, orientation, autofocus/exposure/torch/zoom controls, IMU hooks, overlays, and user flow. The planned `wellfriend-perception` Android binding owns reusable image analysis and must be called through a thin JNI/FFI boundary rather than copied into the app.
+MP7 turns the Android shell into a modular scanner product. `scanner-core` owns session state, `scanner-perception` owns the only core-binding seam, `scanner-ui` owns Compose and CameraX, and `scanner-export` owns export contracts. No Kotlin detector, homography solver, restoration algorithm, OCR engine, or ML Kit scanner dependency is included.
 
-MP1 defines the module and Compose screen only. To build locally, install Android SDK platform 35, Android build tools, JDK 17, and Gradle 8.6.1, then run `gradle :app:assembleDebug` from this directory (or generate and commit a verified wrapper in a future setup milestone). This environment has no Android SDK or Gradle and does not claim an Android binary build. Planned product work includes live CameraX analysis, high-resolution capture, focus/exposure, torch, zoom, orientation, IMU, auto/manual capture, gallery import, crop, multi-page scanning, filters, OCR, and PDF export.
+The native `wellfriend-perception` Android ABI is not yet published. Release builds fail closed through `UnavailableNativePerceptionBridge`; debug builds use `DevMockPerceptionEngine` only to exercise UI/state flow. It is never a production detector.
 
+See [docs/local-build.md](docs/local-build.md) for prerequisites and [docs/architecture.md](docs/architecture.md) for module boundaries.
