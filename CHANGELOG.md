@@ -4,6 +4,7 @@
 
 - Adds Android JNI and web WASM scalar-perception adapters with fail-closed loading states.
 - Documents shape-general boundary evidence and the no-fabrication policy.
+- Adds reproducible Android ABI/WASM package sync, source-SHA manifests, checksums, and real WASM scalar smoke coverage.
 
 ## 0.1.0-alpha.1
 

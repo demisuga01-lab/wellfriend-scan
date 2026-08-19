@@ -1,15 +1,33 @@
-import { DevMockPerceptionEngine } from "./perception/dev-mock-engine.js";
 import type { WebPerceptionEngine } from "./perception/contracts.js";
 import type { WorkerRequest, WorkerResponse } from "./workers/protocol.js";
 
+let configuredRuntime: WebPerceptionEngine | undefined;
+let configuredLoader: (() => Promise<WebPerceptionEngine>) | undefined;
+
+/** Production worker entry points configure this loader; tests pass their engine explicitly. */
+export function configureProductionWorker(loader: () => Promise<WebPerceptionEngine>): void { configuredLoader = loader; configuredRuntime = undefined; }
+async function runtime(): Promise<WebPerceptionEngine> {
+  if (configuredRuntime) return configuredRuntime;
+  if (!configuredLoader) throw new Error("reviewed Wellfriend WASM runtime is not configured; production perception fails closed");
+  configuredRuntime = await configuredLoader();
+  if (configuredRuntime.mode !== "WASM") throw new Error("production worker rejected a non-WASM perception engine");
+  return configuredRuntime;
+}
+
 /**
- * Worker dispatcher. `DevMockPerceptionEngine` is permitted only when tests explicitly omit an
- * engine; browser production entry points must inject a reviewed `WasmPerceptionEngine`.
+ * Worker dispatcher. Dev mocks are accepted only when explicitly supplied by a test/dev caller;
+ * browser production entry points load a reviewed `WasmPerceptionEngine` and otherwise fail closed.
  */
-export async function handleWorkerRequest(request: WorkerRequest, engine: WebPerceptionEngine = new DevMockPerceptionEngine()): Promise<WorkerResponse> {
+export async function handleWorkerRequest(request: WorkerRequest, explicitEngine?: WebPerceptionEngine): Promise<WorkerResponse> {
   try {
     if (request.type === "PING") return { requestId: request.requestId, type: "PONG" };
-    if (request.type === "LOAD_WASM") return engine.mode === "WASM" ? { requestId: request.requestId, type: "ENGINE_READY" } : { requestId: request.requestId, type: "ENGINE_FAILED", message: "reviewed Wellfriend WASM runtime is not loaded; production perception fails closed" };
+    if (request.type === "LOAD_WASM") {
+      try {
+        const engine = explicitEngine ?? await runtime();
+        return engine.mode === "WASM" ? { requestId: request.requestId, type: "ENGINE_READY" } : { requestId: request.requestId, type: "ENGINE_FAILED", message: "reviewed Wellfriend WASM runtime is not loaded; production perception fails closed" };
+      } catch (error) { return { requestId: request.requestId, type: "ENGINE_FAILED", message: error instanceof Error ? error.message : "WASM runtime load failed" }; }
+    }
+    const engine = explicitEngine ?? await runtime();
     if (request.type === "CANCEL_JOB") return { requestId: request.requestId, type: "ERROR", message: "cancellation is acknowledged but no job queue is active" };
     if (request.type === "ANALYZE_FRAME") return { requestId: request.requestId, type: "ANALYSIS_RESULT", result: await engine.analyzeFrame(request.frame) };
     if (request.type === "RECONSTRUCT_PAGE") return { requestId: request.requestId, type: "RECONSTRUCTION_RESULT", result: await engine.reconstructPage(request.request) };

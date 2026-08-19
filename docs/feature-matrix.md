@@ -3,8 +3,8 @@
 | Capability | Android | Web | Desktop | Status |
 | --- | --- | --- | --- | --- |
 | Camera/upload/session/crop UX | reference app | reference app | workflow contract | implemented surface |
-| Scalar document analysis | JNI C-ABI seam | WASM module seam | future native seam | real engine where reviewed runtime is loaded |
-| Native/WASM missing runtime | release error | worker `ENGINE_FAILED` | n/a | fail-closed |
+| Scalar document analysis | packaged C-ABI/JNI artifact | packaged local WASM worker artifact | web/shared contract | real scalar engine where a verified artifact is synced |
+| Native/WASM missing runtime | release error | worker `ENGINE_FAILED` | n/a | fail-closed, never mock fallback |
 | Dev perception mock | debug/test only | test/direct-handler only | test only | mock/dev-only |
 | Quad boundary detection | scalar baseline | scalar baseline | future | experimental |
 | Shape-general boundary contract | shared runtime JSON | shared runtime JSON | shared contract | implemented contract; algorithms future |

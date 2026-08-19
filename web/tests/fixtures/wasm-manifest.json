@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "wellfriend-wasm-package",
+  "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "runtime_schema_version": 1,
+  "exports": ["createEngine", "destroyEngine", "version", "EngineHandle.analyzeFrame", "EngineHandle.reconstructPage", "EngineHandle.applyFilter"],
+  "files": [
+    {"path": "wellfriend_perception_bg.wasm", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "bytes": 1},
+    {"path": "wellfriend_perception.js", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "bytes": 1},
+    {"path": "wellfriend_perception.d.ts", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "bytes": 1},
+    {"path": "package.json", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "bytes": 1}
+  ]
+}
