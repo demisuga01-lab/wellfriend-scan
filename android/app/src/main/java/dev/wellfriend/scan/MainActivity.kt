@@ -1,7 +1,9 @@
 package dev.wellfriend.scan
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,6 +16,7 @@ import dev.wellfriend.scan.perception.PerceptionEngineFactory
 import dev.wellfriend.scan.perception.NativeRuntimeImage
 import dev.wellfriend.scan.perception.NativeRuntimeImageStore
 import dev.wellfriend.scan.perception.NativeRuntimeArtifactDiagnostics
+import dev.wellfriend.scan.perception.NativeRuntimeLogger
 import dev.wellfriend.scan.perception.ScanController
 import dev.wellfriend.scan.ui.WellfriendScannerApp
 import dev.wellfriend.scan.ui.camera.CameraXScannerController
@@ -29,6 +32,8 @@ class MainActivity : ComponentActivity() {
     private val runtimeImages = NativeRuntimeImageStore()
 
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        Log.i("WellfriendCamera", "camera permission result granted=$granted")
+        if (::cameraController.isInitialized) cameraController.onPermissionResult(granted)
         scanController.onPermissionResult(granted)
     }
     private val galleryPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -47,6 +52,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        NativeRuntimeLogger.configure { level, message, throwable ->
+            when (level) {
+                NativeRuntimeLogger.Level.DEBUG -> Log.d("WellfriendNative", message)
+                NativeRuntimeLogger.Level.INFO -> Log.i("WellfriendNative", message)
+                NativeRuntimeLogger.Level.ERROR -> Log.e("WellfriendNative", message, throwable)
+            }
+        }
         runCatching {
             val manifest = assets.open("wellfriend-runtime/android/manifest.json").bufferedReader().use { it.readText() }
             val checksums = assets.open("wellfriend-runtime/android/checksums.json").bufferedReader().use { it.readText() }
@@ -57,12 +69,28 @@ class MainActivity : ComponentActivity() {
             context = this,
             lifecycleOwner = this,
             onFrame = { frame ->
+                Log.i(
+                    "WellfriendNative",
+                    "analyzeFrame called frame=${frame.frameId} size=${frame.size.width}x${frame.size.height} stride=${frame.rowStrideBytes} format=${frame.pixelFormat}",
+                )
                 scanController.onCameraStarted()
-                scanController.analyzeFrame(frame)
+                val result = scanController.analyzeFrame(frame)
+                Log.i(
+                    "WellfriendNative",
+                    "analyzeFrame result mode=${result.engineMode} guidance=${result.guidance} confidence=${result.captureReadinessScore}",
+                )
             },
             onCameraError = { scanController.onCameraFailure(it) },
         )
         imuHooks = ImuCaptureHooks(this) { /* MP7 records the hook; MP3 temporal fusion owns use. */ }
+        // ActivityResultContracts only calls its callback after an explicit launch. A camera grant
+        // restored by Android before process start must still transition the controller into the
+        // bindable state; otherwise PreviewView exists but no CameraX use cases are attached.
+        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            Log.i("WellfriendCamera", "camera permission already granted at activity creation")
+            cameraController.onPermissionResult(true)
+            scanController.onPermissionResult(true)
+        }
         setContent {
             WellfriendScannerApp(
                 scanController = scanController,

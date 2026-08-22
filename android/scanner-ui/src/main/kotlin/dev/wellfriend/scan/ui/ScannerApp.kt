@@ -116,7 +116,7 @@ private fun CameraScreen(
                 Button(onClick = onManualCapture) { Text("Capture") }
                 OutlinedButton(onClick = onGalleryImport) { Text("Import") }
             }
-            DebugDiagnostics(state)
+            DebugDiagnostics(state, cameraController)
         }
     }
 }
@@ -206,17 +206,26 @@ private fun FilterRow(active: ScanPage, scanController: ScanController) {
 }
 
 @Composable
-private fun DebugDiagnostics(state: ScannerUiState) {
-    val analysis = state.analysis ?: return
+private fun DebugDiagnostics(state: ScannerUiState, cameraController: CameraXScannerController? = null) {
+    val cameraDiagnostics by cameraController?.diagnostics?.collectAsState()
+        ?: remember { mutableStateOf(null) }
     val artifact = NativeRuntimeArtifactDiagnostics.snapshot()
     Column(modifier = Modifier.fillMaxWidth().background(Color(0xAA111111)).padding(8.dp)) {
-        Text("Runtime ${analysis.engineMode}: ${NativeLibraryLoader.status.diagnostic}", color = Color.White)
+        val analysis = state.analysis
+        Text("Runtime ${analysis?.engineMode ?: "pending"}: ${NativeLibraryLoader.status.diagnostic}", color = Color.White)
         Text("Artifact ${artifact.sourceSha ?: "unavailable"} schema ${artifact.schemaVersion ?: "?"}", color = Color.White)
-        Text("Frame rotation ${analysis.rotationDegrees}; mirror ${analysis.mirrored}", color = Color.White)
-        Text("Debug · ${analysis.engineMode} · ${analysis.inputSize.width}×${analysis.inputSize.height}", color = Color.White)
-        Text("Readiness ${analysis.captureReadiness} ${analysis.captureReadinessScore}", color = Color.White)
-        Text("Timings ${analysis.stageTimingsMillis}", color = Color.White)
+        cameraDiagnostics?.let { camera ->
+            Text("Camera permission=${camera.permissionGranted} provider=${camera.providerObtained} preview=${camera.previewSurfaceAttached} bound=${camera.useCasesBound}", color = Color.White)
+            Text("Camera lens=${camera.lensFacing} frames=${camera.frameCount} ${camera.lastFrame ?: "no frame yet"}", color = Color.White)
+            camera.lastError?.let { Text("Camera error: $it", color = Color.Red) }
+        }
+        analysis?.let {
+            Text("Frame rotation ${it.rotationDegrees}; mirror ${it.mirrored}", color = Color.White)
+            Text("Debug · ${it.engineMode} · ${it.inputSize.width}×${it.inputSize.height}", color = Color.White)
+            Text("Readiness ${it.captureReadiness} ${it.captureReadinessScore}", color = Color.White)
+            Text("Timings ${it.stageTimingsMillis}", color = Color.White)
+            Text(it.diagnostics.joinToString(), color = Color.White)
+        }
         artifact.warning?.let { Text("Artifact warning: $it", color = Color.Yellow) }
-        Text(analysis.diagnostics.joinToString(), color = Color.White)
     }
 }

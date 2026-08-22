@@ -5,7 +5,7 @@ $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $source = (Resolve-Path $SourceRoot).Path
 $manifest = Get-Content -Raw (Join-Path $source "manifest.json") | ConvertFrom-Json
 $checksums = Get-Content -Raw (Join-Path $source "checksums.json") | ConvertFrom-Json
-if ($manifest.schema_version -ne 1 -or $manifest.artifact_kind -ne "wellfriend-android-abi" -or $manifest.source_sha -notmatch '^[0-9a-f]{40}$') { throw "Invalid Android runtime artifact manifest" }
+if ($manifest.schema_version -ne 1 -or $manifest.artifact_kind -ne "wellfriend-android-abi" -or $manifest.source_sha -notmatch '^[0-9a-f]{40}$' -or $manifest.page_size_alignment_bytes -ne 16384) { throw "Invalid Android runtime artifact manifest or 16 KiB page-size declaration" }
 $expected = @("arm64-v8a/libwellfriend_perception.so", "arm64-v8a/libwellfriend_perception_jni.so", "x86_64/libwellfriend_perception.so", "x86_64/libwellfriend_perception_jni.so")
 foreach ($relative in $expected) {
     $record = $manifest.libraries | Where-Object { $_.file -eq $relative } | Select-Object -First 1
