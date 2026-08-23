@@ -12,6 +12,7 @@ import dev.wellfriend.scan.core.CaptureMode
 import dev.wellfriend.scan.export.ExportFormat
 import dev.wellfriend.scan.export.ExportRequest
 import dev.wellfriend.scan.export.ScanExporter
+import dev.wellfriend.scan.core.WellfriendScannerOptions
 import dev.wellfriend.scan.perception.PerceptionEngineFactory
 import dev.wellfriend.scan.perception.NativeRuntimeImage
 import dev.wellfriend.scan.perception.NativeRuntimeImageStore
@@ -30,6 +31,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var cameraController: CameraXScannerController
     private lateinit var imuHooks: ImuCaptureHooks
     private val runtimeImages = NativeRuntimeImageStore()
+    private lateinit var processedPageExporter: AndroidProcessedPageExporter
 
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         Log.i("WellfriendCamera", "camera permission result granted=$granted")
@@ -65,6 +67,7 @@ class MainActivity : ComponentActivity() {
             NativeRuntimeArtifactDiagnostics.configure(manifest, checksums)
         }
         scanController = ScanController(PerceptionEngineFactory.create(BuildConfig.DEBUG, runtimeImages))
+        processedPageExporter = AndroidProcessedPageExporter(this, runtimeImages)
         cameraController = CameraXScannerController(
             context = this,
             lifecycleOwner = this,
@@ -79,6 +82,7 @@ class MainActivity : ComponentActivity() {
                     "WellfriendNative",
                     "analyzeFrame result mode=${result.engineMode} guidance=${result.guidance} confidence=${result.captureReadinessScore}",
                 )
+                if (scanController.isAutoCaptureArmed()) capturePhoto(CaptureMode.AUTO)
             },
             onCameraError = { scanController.onCameraFailure(it) },
         )
@@ -95,13 +99,13 @@ class MainActivity : ComponentActivity() {
             WellfriendScannerApp(
                 scanController = scanController,
                 cameraController = cameraController,
-                onRequestCameraPermission = {
-                    scanController.requestPermission()
-                    cameraPermission.launch(Manifest.permission.CAMERA)
-                },
+                runtimeImages = runtimeImages,
+                options = WellfriendScannerOptions(),
+                onStartCamera = ::startCamera,
                 onManualCapture = ::capturePhoto,
                 onGalleryImport = { galleryPicker.launch(arrayOf("image/*")) },
                 onExportDebug = ::exportDebugJson,
+                onExportPage = { page, format -> processedPageExporter.exportAndShare(page, format) },
             )
         }
     }
@@ -121,8 +125,8 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
-    private fun capturePhoto() {
-        if (!scanController.requestCapture(CaptureMode.MANUAL)) return
+    private fun capturePhoto(mode: CaptureMode = CaptureMode.MANUAL) {
+        if (!scanController.requestCapture(mode)) return
         val output = File(cacheDir, "captures/scan-${System.currentTimeMillis()}.jpg").also { it.parentFile?.mkdirs() }
         cameraController.takeHighResolutionPhoto(
             output = output,
@@ -139,6 +143,17 @@ class MainActivity : ComponentActivity() {
             },
             onError = scanController::onCameraFailure,
         )
+    }
+
+    private fun startCamera() {
+        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            Log.i("WellfriendCamera", "starting camera with an already granted permission")
+            cameraController.onPermissionResult(true)
+            scanController.onPermissionResult(true)
+        } else {
+            scanController.requestPermission()
+            cameraPermission.launch(Manifest.permission.CAMERA)
+        }
     }
 
     private fun exportDebugJson() {

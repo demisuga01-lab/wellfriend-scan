@@ -19,6 +19,7 @@ android {
 dependencies {
     api(project(":scanner-core"))
     api(project(":scanner-perception"))
+    implementation(project(":scanner-export"))
     implementation(platform("androidx.compose:compose-bom:2024.10.01"))
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.15.0")

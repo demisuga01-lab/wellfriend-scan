@@ -198,6 +198,12 @@ class CameraXScannerController(
                         proxy.close()
                     }
                     if (frame != null) {
+                        if (frameNumber == 1L || frameNumber % 60L == 0L) {
+                            Log.i(
+                                "WellfriendAnalysis",
+                                "Gray8 mapped frame=$frameNumber size=${frame.size.width}x${frame.size.height} stride=${frame.rowStrideBytes} rotation=${frame.rotationDegrees}",
+                            )
+                        }
                         updateDiagnostics {
                             it.copy(frameCount = frameNumber, lastFrame = "${frame.size.width}x${frame.size.height} Gray8 stride=${frame.rowStrideBytes} rotation=${frame.rotationDegrees}")
                         }

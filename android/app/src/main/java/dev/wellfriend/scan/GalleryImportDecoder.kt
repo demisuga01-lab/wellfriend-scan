@@ -25,7 +25,6 @@ class GalleryImportDecoder(private val context: Context) {
         context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         require(bounds.outWidth > 0 && bounds.outHeight > 0) { "gallery image has invalid dimensions" }
         require(bounds.outWidth.toLong() * bounds.outHeight <= MAX_SOURCE_PIXELS) { "gallery image exceeds 20 megapixel guardrail" }
-        val sourceSize = ImageSize(bounds.outWidth, bounds.outHeight)
         val options = BitmapFactory.Options().apply {
             inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight)
             inPreferredConfig = Bitmap.Config.ARGB_8888
@@ -37,7 +36,9 @@ class GalleryImportDecoder(private val context: Context) {
         bitmap.copyPixelsToBuffer(rgba)
         bitmap.recycle()
         GalleryImport(
-            sourceSize = sourceSize,
+            // The bounded decoded image is the only image registered with the native runtime,
+            // so its dimensions are the valid reconstruction coordinate space.
+            sourceSize = analysisSize,
             frame = PerceptionFrame(
                 frameId = System.nanoTime(),
                 timestampMillis = System.currentTimeMillis(),

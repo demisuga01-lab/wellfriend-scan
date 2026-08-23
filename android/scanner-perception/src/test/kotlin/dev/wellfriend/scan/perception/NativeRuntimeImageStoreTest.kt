@@ -19,6 +19,7 @@ class NativeRuntimeImageStoreTest {
             store,
         )
         assertEquals(listOf("grayscale"), filtered.appliedProcessorIds)
+        assertEquals(ImageSize(2, 2), filtered.outputSize)
         assertEquals(4, store.resolve(filtered.outputUri).bytes.size)
     }
 

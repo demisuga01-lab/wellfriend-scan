@@ -144,6 +144,7 @@ object NativeJsonMapper {
         val image = runtimeImage(json)
         return FilterResult(
             outputUri = images.registerOutput(image),
+            outputSize = image.size(),
             appliedProcessorIds = strings(json, "applied_processor_ids"),
             diagnostics = strings(json, "diagnostics") + "native_scalar_filter",
             engineMode = PerceptionEngineMode.NATIVE,
