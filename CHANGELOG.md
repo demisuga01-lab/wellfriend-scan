@@ -7,6 +7,7 @@
 - Adds reproducible Android ABI/WASM package sync, source-SHA manifests, checksums, and real WASM scalar smoke coverage.
 - Adds a verified Gradle wrapper, crop/stride-aware CameraX luma extraction, guarded source-pixel registries, and real WASM reconstruction/filter smoke coverage.
 - Adds explicit device/browser runtime checklists and runtime artifact diagnostics; physical device and browser camera validation remain manual gates.
+- Rebuilds the Android reference shell around a manual-first camera flow, validated crop/review/filter pages, bounded native-output previews, per-page session controls, JPEG/PNG sharing, and host-configurable scanner options.
 
 ## 0.1.0-alpha.1
 
