@@ -1,5 +1,5 @@
 import { addDraftPage, attachGeometry, createSession, deletePage, effectiveGeometry, pageById, reorderPage, rotatePage, updatePage, type CaptureGuidance, type CaptureMode, type FilterPreset, type ImageSize, type PageGeometry, type ScanSession, type ScannerState } from "../../../shared/src/scan-session.js";
-import type { FilterResult, FrameAnalysisResult, PerceptionFrame, ReconstructionResult, WebPerceptionEngine } from "../perception/contracts.js";
+import type { FilterResult, FrameAnalysisResult, PerceptionFrame, ReconstructionResult, RuntimeSourceImage, WebPerceptionEngine } from "../perception/contracts.js";
 
 export interface WebScannerState { readonly state: ScannerState; readonly session: ScanSession; readonly activePageId?: string; readonly analysis?: FrameAnalysisResult; readonly guidance: readonly CaptureGuidance[]; readonly error?: string; readonly workerMessages: readonly string[]; }
 export class WebScanController {
@@ -7,6 +7,7 @@ export class WebScanController {
   constructor(private readonly engine: WebPerceptionEngine, session: ScanSession = createSession(`web-${Date.now()}`)) { this.current = { state: "IDLE", session, guidance: [], workerMessages: [] }; }
   get state(): WebScannerState { return this.current; }
   get engineMode() { return this.engine.mode; }
+  async registerSourceImage(uri: string, image: RuntimeSourceImage): Promise<void> { if (!this.engine.registerSourceImage) throw new Error("selected perception engine cannot accept decoded source pixels"); await this.engine.registerSourceImage(uri, image); }
   private set(patch: Partial<WebScannerState>): void { this.current = { ...this.current, ...patch }; }
   async analyzeFrame(frame: PerceptionFrame): Promise<FrameAnalysisResult> { try { const analysis = await this.engine.analyzeFrame(frame); const state: ScannerState = analysis.captureReadiness === "CAPTURE_NOW" || analysis.captureReadiness === "READY" ? "READY" : analysis.captureReadiness === "ALMOST_READY" ? "ALMOST_READY" : analysis.refinementResult.geometry || analysis.fusionResult.geometry ? "DOCUMENT_CANDIDATE_FOUND" : "SEARCHING_FOR_DOCUMENT"; this.set({ state, analysis, guidance: analysis.guidance, error: undefined, workerMessages: [...this.current.workerMessages, `ANALYZE_FRAME:${analysis.engineMode}`] }); return analysis; } catch (error) { this.set({ state: "ERROR", error: error instanceof Error ? error.message : "analysis failed" }); throw error; } }
   requestCapture(mode: CaptureMode): boolean { if (mode === "AUTO" && this.current.analysis?.captureReadiness !== "CAPTURE_NOW") return false; this.set({ state: "CAPTURING", guidance: ["CAPTURING"] }); return true; }

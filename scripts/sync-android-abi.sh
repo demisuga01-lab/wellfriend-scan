@@ -7,7 +7,7 @@ import hashlib,json,os,shutil,sys
 root,source=sys.argv[1:]
 with open(os.path.join(source,'manifest.json')) as f: manifest=json.load(f)
 with open(os.path.join(source,'checksums.json')) as f: checksums=json.load(f)
-if manifest.get('schema_version') != 1 or manifest.get('artifact_kind') != 'wellfriend-android-abi' or len(manifest.get('source_sha','')) != 40: raise SystemExit('invalid Android artifact manifest')
+if manifest.get('schema_version') != 1 or manifest.get('artifact_kind') != 'wellfriend-android-abi' or len(manifest.get('source_sha','')) != 40 or manifest.get('page_size_alignment_bytes') != 16384: raise SystemExit('invalid Android artifact manifest or 16 KiB page-size declaration')
 records={r['file']:r for r in manifest.get('libraries',[])}; sums={r['path']:r['sha256'] for r in checksums.get('files',[])}
 for rel in ('arm64-v8a/libwellfriend_perception.so','arm64-v8a/libwellfriend_perception_jni.so','x86_64/libwellfriend_perception.so','x86_64/libwellfriend_perception_jni.so'):
  p=os.path.join(source,rel); actual=hashlib.sha256(open(p,'rb').read()).hexdigest()

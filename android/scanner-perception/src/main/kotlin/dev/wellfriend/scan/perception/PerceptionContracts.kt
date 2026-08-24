@@ -115,6 +115,7 @@ data class FilterRequest(
 
 data class FilterResult(
     val outputUri: String,
+    val outputSize: ImageSize?,
     val appliedProcessorIds: List<String>,
     val diagnostics: List<String>,
     val engineMode: PerceptionEngineMode,
@@ -210,6 +211,7 @@ class DevMockPerceptionEngine : PerceptionEngine {
 
     override suspend fun applyFilter(request: FilterRequest): FilterResult = FilterResult(
         outputUri = request.inputUri,
+        outputSize = null,
         appliedProcessorIds = emptyList(),
         diagnostics = listOf("dev_only_mock_filter; no pixel transform was performed"),
         engineMode = mode,
@@ -217,10 +219,10 @@ class DevMockPerceptionEngine : PerceptionEngine {
 }
 
 object PerceptionEngineFactory {
-    fun create(isDebugBuild: Boolean): PerceptionEngine = if (isDebugBuild) {
-        JniNativePerceptionBridge.createOrNull()?.let(::NativePerceptionEngine) ?: DevMockPerceptionEngine()
+    fun create(isDebugBuild: Boolean, runtimeImages: NativeRuntimeImageStore? = null): PerceptionEngine = if (isDebugBuild) {
+        JniNativePerceptionBridge.createOrNull(runtimeImages)?.let(::NativePerceptionEngine) ?: DevMockPerceptionEngine()
     } else {
-        JniNativePerceptionBridge.createOrNull()?.let(::NativePerceptionEngine)
+        JniNativePerceptionBridge.createOrNull(runtimeImages)?.let(::NativePerceptionEngine)
             ?: NativePerceptionEngine(UnavailableNativePerceptionBridge())
     }
 }

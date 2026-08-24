@@ -1,5 +1,6 @@
 package dev.wellfriend.scan.ui.camera
 
+import android.util.Log
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
@@ -15,9 +16,18 @@ fun CameraPreview(controller: CameraXScannerController, enabled: Boolean, modifi
         },
         factory = { context ->
             PreviewView(context).apply {
+                // TextureView-backed preview avoids device-specific SurfaceView black frames.
+                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                 scaleType = PreviewView.ScaleType.FILL_CENTER
-                if (enabled) controller.bind(this)
+                Log.i("WellfriendPreview", "PreviewView created implementation=COMPATIBLE scale=FILL_CENTER")
+                controller.onPreviewViewCreated(this)
             }
         },
+        // `factory` only runs once. Binding here is required after the asynchronous permission
+        // grant causes the Compose state to change from REQUESTING_PERMISSION to CAMERA_STARTING.
+        update = { previewView ->
+            if (enabled) controller.bind(previewView) else controller.unbind(previewView)
+        },
+        onRelease = { previewView -> controller.unbind(previewView) },
     )
 }

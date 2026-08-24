@@ -1,11 +1,14 @@
 import type { WebPerceptionEngine } from "./perception/contracts.js";
+import type { RuntimeImage } from "./perception/worker-engine.js";
 import type { WorkerRequest, WorkerResponse } from "./workers/protocol.js";
 
 let configuredRuntime: WebPerceptionEngine | undefined;
 let configuredLoader: (() => Promise<WebPerceptionEngine>) | undefined;
+let configuredImageRegistrar: ((uri: string, image: RuntimeImage) => void) | undefined;
 
 /** Production worker entry points configure this loader; tests pass their engine explicitly. */
 export function configureProductionWorker(loader: () => Promise<WebPerceptionEngine>): void { configuredLoader = loader; configuredRuntime = undefined; }
+export function configureWorkerImageRegistrar(registrar: (uri: string, image: RuntimeImage) => void): void { configuredImageRegistrar = registrar; }
 async function runtime(): Promise<WebPerceptionEngine> {
   if (configuredRuntime) return configuredRuntime;
   if (!configuredLoader) throw new Error("reviewed Wellfriend WASM runtime is not configured; production perception fails closed");
@@ -21,6 +24,11 @@ async function runtime(): Promise<WebPerceptionEngine> {
 export async function handleWorkerRequest(request: WorkerRequest, explicitEngine?: WebPerceptionEngine): Promise<WorkerResponse> {
   try {
     if (request.type === "PING") return { requestId: request.requestId, type: "PONG" };
+    if (request.type === "REGISTER_IMAGE") {
+      if (!configuredImageRegistrar) return { requestId: request.requestId, type: "ERROR", message: "runtime image registration is not configured" };
+      configuredImageRegistrar(request.uri, request.image);
+      return { requestId: request.requestId, type: "IMAGE_REGISTERED" };
+    }
     if (request.type === "LOAD_WASM") {
       try {
         const engine = explicitEngine ?? await runtime();
