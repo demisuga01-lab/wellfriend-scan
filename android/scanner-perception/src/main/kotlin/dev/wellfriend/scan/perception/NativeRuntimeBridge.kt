@@ -176,18 +176,20 @@ object NativeJsonMapper {
     }
 
     private fun string(json: String, key: String): String? =
-        Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"").find(json)?.groupValues?.get(1)
+        // All keys are internal, fixed schema identifiers. Do not use \Q...\E quoting:
+        // Android's ICU regex engine rejects it even though the desktop JVM accepts it.
+        Regex("\\\"$key\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"").find(json)?.groupValues?.get(1)
 
     private fun number(json: String, key: String): Float? =
-        Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)").find(json)?.groupValues?.get(1)?.toFloatOrNull()
+        Regex("\\\"$key\\\"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)").find(json)?.groupValues?.get(1)?.toFloatOrNull()
 
     private fun strings(json: String, key: String): List<String> {
-        val match = Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*\\[([^]]*)]", RegexOption.DOT_MATCHES_ALL).find(json) ?: return emptyList()
+        val match = Regex("\\\"$key\\\"\\s*:\\s*\\[([^]]*)]", RegexOption.DOT_MATCHES_ALL).find(json) ?: return emptyList()
         return Regex("\\\"([^\\\"]+)\\\"").findAll(match.groupValues[1]).map { it.groupValues[1] }.toList()
     }
 
     private fun quad(json: String, key: String, size: ImageSize, confidence: Float): PageGeometry? {
-        val match = Regex("\\\"${Regex.escape(key)}\\\"\\s*:\\s*\\{\\s*\\\"points\\\"\\s*:\\s*\\[(.*?)\\]\\s*}", RegexOption.DOT_MATCHES_ALL).find(json) ?: return null
+        val match = Regex("\\\"$key\\\"\\s*:\\s*\\{\\s*\\\"points\\\"\\s*:\\s*\\[(.*?)\\]\\s*\\}", RegexOption.DOT_MATCHES_ALL).find(json) ?: return null
         val points = Regex("\\{\\s*\\\"x\\\"\\s*:\\s*(-?[0-9.]+)\\s*,\\s*\\\"y\\\"\\s*:\\s*(-?[0-9.]+)\\s*}")
             .findAll(match.groupValues[1])
             .mapNotNull { result -> result.groupValues[1].toFloatOrNull()?.let { x -> result.groupValues[2].toFloatOrNull()?.let { y -> Point2D(x, y) } } }
