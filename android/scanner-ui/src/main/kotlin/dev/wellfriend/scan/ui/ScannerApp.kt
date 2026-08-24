@@ -3,6 +3,7 @@ package dev.wellfriend.scan.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,11 +12,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -45,7 +50,9 @@ import dev.wellfriend.scan.core.CaptureGuidance
 import dev.wellfriend.scan.core.FilterPreset
 import dev.wellfriend.scan.core.ScanPage
 import dev.wellfriend.scan.core.ScannerControlPlacement
+import dev.wellfriend.scan.core.ScannerFeatureSet
 import dev.wellfriend.scan.core.ScannerState
+import dev.wellfriend.scan.core.ScannerTheme
 import dev.wellfriend.scan.core.WellfriendScannerOptions
 import dev.wellfriend.scan.export.ExportFormat
 import dev.wellfriend.scan.perception.NativeLibraryLoader
@@ -61,9 +68,23 @@ import dev.wellfriend.scan.ui.overlay.ManualCropEditor
 import java.io.File
 import kotlinx.coroutines.launch
 
-private enum class ProductDestination { SCANNER, FILTERS, EXPORT, SETTINGS, DIAGNOSTICS }
+private enum class ProductDestination { CAMERA, FILTERS, EXPORT, SETTINGS, DIAGNOSTICS }
 
-/** Product shell: Kotlin owns presentation and session intent; native perception owns image decisions. */
+private val AppBackground = Color(0xFFF7F7F5)
+private val Ink = Color(0xFF151615)
+private val MutedInk = Color(0xFF666A65)
+private val CameraPanel = Color(0xF2171917)
+private val ReviewStates = setOf(
+    ScannerState.REVIEWING_PAGE,
+    ScannerState.APPLYING_FILTER,
+    ScannerState.PAGE_ACCEPTED,
+    ScannerState.EXPORTING,
+)
+
+/**
+ * Restrained product shell. Kotlin owns navigation and configuration; native perception owns
+ * all image analysis, reconstruction and implemented scalar filters.
+ */
 @Composable
 fun WellfriendScannerApp(
     scanController: ScanController,
@@ -77,11 +98,11 @@ fun WellfriendScannerApp(
     onExportPage: (ScanPage, ExportFormat) -> Result<File>,
 ) {
     val state by scanController.state.collectAsState()
-    var destination by remember { mutableStateOf(ProductDestination.SCANNER) }
+    var destination by remember { mutableStateOf(ProductDestination.CAMERA) }
     var configuredOptions by remember(options) { mutableStateOf(options) }
     var lastCapturedPageId by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(state.activePageId, state.session.pages.size) {
+    LaunchedEffect(state.activePageId, state.session.pages.size, state.state) {
         val page = state.activePageId?.let { id -> state.session.pages.firstOrNull { it.id == id } }
         if (page != null && page.id != lastCapturedPageId && state.state == ScannerState.REVIEWING_PAGE) {
             lastCapturedPageId = page.id
@@ -92,23 +113,55 @@ fun WellfriendScannerApp(
 
     MaterialTheme {
         when {
-            destination == ProductDestination.SETTINGS -> SettingsScreen(configuredOptions, { configuredOptions = it }) { destination = ProductDestination.SCANNER }
-            destination == ProductDestination.DIAGNOSTICS -> DiagnosticsScreen(state, cameraController, { destination = ProductDestination.SCANNER }, onExportDebug)
-            destination == ProductDestination.EXPORT -> ExportScreen(state, configuredOptions, { destination = ProductDestination.SCANNER }, onExportDebug) { page, format ->
-                onExportPage(page, format).onSuccess { configuredOptions.callbacks.onExportCompleted?.invoke(state.session, configuredOptions.exportOptions) }
-            }
-            destination == ProductDestination.FILTERS -> FilterScreen(state, configuredOptions, runtimeImages, scanController) { destination = ProductDestination.SCANNER }
-            state.state == ScannerState.EDITING_CROP -> CropEditorScreen(state, runtimeImages, scanController)
-            state.state in setOf(ScannerState.REVIEWING_PAGE, ScannerState.APPLYING_FILTER, ScannerState.PAGE_ACCEPTED, ScannerState.EXPORTING) -> ReviewScreen(
-                state, configuredOptions, runtimeImages, scanController,
+            destination == ProductDestination.SETTINGS -> SettingsScreen(
+                options = configuredOptions,
+                onChange = { configuredOptions = it },
+                onBack = { destination = ProductDestination.CAMERA },
+                onOpenDiagnostics = { destination = ProductDestination.DIAGNOSTICS },
+            )
+            destination == ProductDestination.DIAGNOSTICS -> DiagnosticsScreen(
+                state = state,
+                cameraController = cameraController,
+                onBack = { destination = ProductDestination.CAMERA },
+                onExportDebug = onExportDebug,
+            )
+            destination == ProductDestination.EXPORT -> ExportScreen(
+                state = state,
+                options = configuredOptions,
+                onBack = { destination = ProductDestination.CAMERA },
+                onExportDebug = onExportDebug,
+                onExportPage = { page, format ->
+                    onExportPage(page, format).onSuccess {
+                        configuredOptions.callbacks.onExportCompleted?.invoke(state.session, configuredOptions.exportOptions)
+                    }
+                },
+            )
+            destination == ProductDestination.FILTERS -> FilterScreen(
+                state = state,
+                options = configuredOptions,
+                runtimeImages = runtimeImages,
+                scanController = scanController,
+                onBack = { destination = ProductDestination.CAMERA },
+            )
+            state.state == ScannerState.EDITING_CROP -> CropScreen(state, runtimeImages, scanController)
+            state.state in ReviewStates -> ReviewScreen(
+                state = state,
+                options = configuredOptions,
+                runtimeImages = runtimeImages,
+                scanController = scanController,
                 onContinueScanning = scanController::continueScanning,
                 onOpenFilters = { destination = ProductDestination.FILTERS },
                 onOpenExport = { destination = ProductDestination.EXPORT },
                 onOpenSettings = { destination = ProductDestination.SETTINGS },
-                onOpenDiagnostics = { destination = ProductDestination.DIAGNOSTICS },
             )
             else -> CameraScreen(
-                state, configuredOptions, scanController, cameraController, onStartCamera, onManualCapture, onGalleryImport,
+                state = state,
+                options = configuredOptions,
+                scanController = scanController,
+                cameraController = cameraController,
+                onStartCamera = onStartCamera,
+                onManualCapture = onManualCapture,
+                onGalleryImport = onGalleryImport,
                 onOpenSettings = { destination = ProductDestination.SETTINGS },
                 onOpenDiagnostics = { destination = ProductDestination.DIAGNOSTICS },
             )
@@ -130,68 +183,73 @@ private fun CameraScreen(
 ) {
     var torchEnabled by remember { mutableStateOf(false) }
     var autoCaptureArmed by remember(options.autoCaptureEnabled) { mutableStateOf(options.autoCaptureEnabled) }
-    val cameraDiagnostics by cameraController.diagnostics.collectAsState()
-    val cameraEnabled = state.state !in setOf(ScannerState.IDLE, ScannerState.REQUESTING_PERMISSION, ScannerState.ERROR)
+    val camera by cameraController.diagnostics.collectAsState()
     val accent = Color(options.theme.accentArgb.toInt())
-
+    val cameraEnabled = state.state !in setOf(ScannerState.IDLE, ScannerState.REQUESTING_PERMISSION, ScannerState.ERROR)
     LaunchedEffect(autoCaptureArmed) { scanController.setAutoCaptureArmed(autoCaptureArmed) }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
         CameraPreview(cameraController, cameraEnabled, Modifier.fillMaxSize())
         state.analysis?.let { analysis ->
-            LiveDocumentOverlay(analysis.overlayGeometry, analysis.inputSize, analysis.rotationDegrees, analysis.mirrored, Modifier.fillMaxSize())
+            LiveDocumentOverlay(
+                geometry = analysis.overlayGeometry,
+                imageSize = analysis.inputSize,
+                rotationDegrees = analysis.rotationDegrees,
+                mirrored = analysis.mirrored,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 18.dp),
+            modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(options.theme.brandName, color = Color.White, fontWeight = FontWeight.Bold)
-                    Text(options.textLabels.cameraTitle, color = Color(0xFFE2E7EA))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(options.theme.brandName, color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(options.textLabels.cameraTitle, color = Color(0xFFD3D7D2), style = MaterialTheme.typography.labelMedium)
                 }
-                RuntimeChip(state, cameraDiagnostics.useCasesBound)
+                RuntimeChip(state, camera.useCasesBound)
                 Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = onOpenSettings) { Text("Settings") }
+                CompactAction("Settings", onOpenSettings)
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                GuidanceCard(state.guidance, state.analysis?.captureReadinessScore)
-                state.error?.let { CameraErrorCard(it, onStartCamera) }
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                GuidancePill(state.guidance, state.analysis?.captureReadinessScore)
+                state.error?.let { CameraFailure(it, onStartCamera) }
             }
             val controlModifier = if (options.theme.controlPlacement == ScannerControlPlacement.BOTTOM_BAR) {
                 Modifier.fillMaxWidth()
             } else {
-                // A host can keep the capture controls clear of a branded bottom sheet. The
-                // controls remain inside this safe-area-aware camera column; only their width
-                // and horizontal placement change.
-                Modifier.fillMaxWidth(0.82f).align(Alignment.End)
+                Modifier.fillMaxWidth(0.78f).align(Alignment.End)
             }
-            Surface(color = Color(0xED101419), shape = RoundedCornerShape(28.dp), modifier = controlModifier) {
-                Column(modifier = Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("${state.session.pages.size} page${if (state.session.pages.size == 1) "" else "s"}", color = Color.White)
-                        Text(if (autoCaptureArmed) "Auto capture armed" else "Manual capture", color = Color(0xFFB8C3C9))
+            Surface(modifier = controlModifier, color = CameraPanel, shape = RoundedCornerShape(28.dp)) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("${state.session.pages.size} page${if (state.session.pages.size == 1) "" else "s"}", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                        Text(if (autoCaptureArmed) "Auto capture" else "Manual capture", color = Color(0xFFB9C0BA), style = MaterialTheme.typography.labelMedium)
                     }
                     Spacer(Modifier.height(10.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
-                        if (options.enabledFeatures.torch) ControlButton(if (torchEnabled) "Torch on" else "Torch") { torchEnabled = !torchEnabled; cameraController.setTorch(torchEnabled) }
-                        if (options.enabledFeatures.galleryImport) ControlButton(options.textLabels.import, onGalleryImport)
-                        if (options.enabledFeatures.autoCapture) ControlButton(if (autoCaptureArmed) "Auto" else "Manual") { autoCaptureArmed = !autoCaptureArmed }
-                        if (options.enabledFeatures.cameraSwitch) ControlButton("Switch") { cameraController.switchCamera() }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = onManualCapture,
-                        enabled = options.enabledFeatures.manualCapture && cameraDiagnostics.useCasesBound,
-                        shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(containerColor = accent),
-                        modifier = Modifier.size(82.dp),
-                    ) {
-                        Text(options.textLabels.capture, textAlign = TextAlign.Center)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (options.enabledFeatures.galleryImport) CompactAction(options.textLabels.import, onGalleryImport)
+                            if (options.enabledFeatures.torch) CompactAction(if (torchEnabled) "Flash on" else "Flash") {
+                                torchEnabled = !torchEnabled
+                                cameraController.setTorch(torchEnabled)
+                            }
+                        }
+                        Button(
+                            onClick = onManualCapture,
+                            enabled = options.enabledFeatures.manualCapture && camera.useCasesBound,
+                            modifier = Modifier.size(76.dp),
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.Black),
+                        ) { Text(options.textLabels.capture, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (options.enabledFeatures.autoCapture) CompactAction(if (autoCaptureArmed) "Auto" else "Manual") { autoCaptureArmed = !autoCaptureArmed }
+                            if (options.enabledFeatures.cameraSwitch) CompactAction("Flip") { cameraController.switchCamera() }
+                        }
                     }
                     if (options.debugPanelEnabled) {
-                        Spacer(Modifier.height(6.dp))
-                        OutlinedButton(onClick = onOpenDiagnostics) { Text("Runtime diagnostics") }
+                        Text("Runtime details", color = Color(0xFFB9C0BA), style = MaterialTheme.typography.labelSmall, modifier = Modifier.clickable(onClick = onOpenDiagnostics).padding(6.dp))
                     }
                 }
             }
@@ -209,179 +267,191 @@ private fun ReviewScreen(
     onOpenFilters: () -> Unit,
     onOpenExport: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenDiagnostics: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     val active = state.activePageId?.let { id -> state.session.pages.firstOrNull { it.id == id } }
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF6F7F8)).padding(16.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Review scan", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("${state.session.pages.size} page${if (state.session.pages.size == 1) "" else "s"} in this session")
-            }
-            OutlinedButton(onClick = onOpenSettings) { Text("Settings") }
-        }
+    if (active == null) {
+        EmptyReview(onContinueScanning)
+        return
+    }
+    val activeIndex = state.session.pages.indexOfFirst { it.id == active.id }
+    Column(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding().navigationBarsPadding().padding(16.dp)) {
+        MinimalTopBar("Review", "${state.session.pages.size} page${if (state.session.pages.size == 1) "" else "s"}", "Settings", onOpenSettings)
         Spacer(Modifier.height(12.dp))
         PageStrip(state, scanController)
         Spacer(Modifier.height(12.dp))
-        if (active == null) {
-            EmptyReview(onContinueScanning)
-            return@Column
+        Card(Modifier.weight(1f).fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1C1A))) {
+            RuntimeImagePreview(active.displayPage?.uri ?: active.sourceUri, runtimeImages, Modifier.fillMaxSize().padding(8.dp), rotationDegrees = active.rotationDegrees)
         }
-        Card(modifier = Modifier.weight(1f).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF20242A))) {
-            RuntimeImagePreview(active.displayPage?.uri ?: active.sourceUri, runtimeImages, Modifier.fillMaxSize().padding(10.dp), rotationDegrees = active.rotationDegrees)
-        }
-        Spacer(Modifier.height(12.dp))
-        Text("${active.filter.name.replace('_', ' ')}  •  ${active.processingStatus.name.lowercase()}")
-        active.diagnostics.lastOrNull()?.let { Text(it, color = Color(0xFF59636A), style = MaterialTheme.typography.bodySmall) }
+        Spacer(Modifier.height(10.dp))
+        Text(active.filter.name.replace('_', ' ') + " · " + active.processingStatus.name.lowercase(), color = MutedInk, style = MaterialTheme.typography.labelMedium)
         Spacer(Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(modifier = Modifier.weight(1f), onClick = { scope.launch { runCatching { scanController.reconstructPage(active.id) } } }) { Text(if (active.canonicalPage == null) "Reconstruct" else "Rebuild") }
-            if (options.manualCropEnabled) OutlinedButton(onClick = { scanController.beginManualCrop(active.id) }) { Text("Crop") }
-            OutlinedButton(onClick = { scanController.rotatePage(active.id) }) { Text("Rotate") }
-            OutlinedButton(onClick = { scanController.retakePage(active.id) }) { Text("Retake") }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryAction("Crop", options.manualCropEnabled, Modifier.weight(1f)) { scanController.beginManualCrop(active.id) }
+            SecondaryAction("Rotate", modifier = Modifier.weight(1f)) { scanController.rotatePage(active.id) }
+            SecondaryAction("Filters", modifier = Modifier.weight(1f), onClick = onOpenFilters)
         }
         Spacer(Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(modifier = Modifier.weight(1f), onClick = onOpenFilters) { Text("Filters") }
-            OutlinedButton(onClick = onOpenExport) { Text("Export") }
-            OutlinedButton(onClick = { scanController.deletePage(active.id) }) { Text("Delete") }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryAction("Retake", modifier = Modifier.weight(1f)) { scanController.retakePage(active.id) }
+            SecondaryAction("Delete", modifier = Modifier.weight(1f)) { scanController.deletePage(active.id) }
+            SecondaryAction("Export", modifier = Modifier.weight(1f), onClick = onOpenExport)
         }
-        val activeIndex = state.session.pages.indexOfFirst { it.id == active.id }
         if (state.session.pages.size > 1) {
             Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    modifier = Modifier.weight(1f),
-                    enabled = activeIndex > 0,
-                    onClick = { scanController.reorderPages(activeIndex, activeIndex - 1) },
-                ) { Text("Move earlier") }
-                OutlinedButton(
-                    modifier = Modifier.weight(1f),
-                    enabled = activeIndex in 0 until state.session.pages.lastIndex,
-                    onClick = { scanController.reorderPages(activeIndex, activeIndex + 1) },
-                ) { Text("Move later") }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SecondaryAction("Move earlier", activeIndex > 0, Modifier.weight(1f)) { scanController.reorderPages(activeIndex, activeIndex - 1) }
+                SecondaryAction("Move later", activeIndex in 0 until state.session.pages.lastIndex, Modifier.weight(1f)) { scanController.reorderPages(activeIndex, activeIndex + 1) }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Button(
-            modifier = Modifier.fillMaxWidth(),
-            enabled = options.multiPageEnabled || state.session.pages.isEmpty(),
-            onClick = onContinueScanning,
-        ) { Text(options.textLabels.continueScanning) }
-        if (options.debugPanelEnabled) OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onOpenDiagnostics) { Text("Runtime diagnostics") }
+        Spacer(Modifier.height(10.dp))
+        Button(modifier = Modifier.fillMaxWidth(), enabled = options.multiPageEnabled || state.session.pages.isEmpty(), onClick = onContinueScanning) { Text(options.textLabels.continueScanning) }
     }
 }
 
 @Composable
-private fun CropEditorScreen(state: ScannerUiState, runtimeImages: NativeRuntimeImageStore, scanController: ScanController) {
+private fun CropScreen(state: ScannerUiState, runtimeImages: NativeRuntimeImageStore, scanController: ScanController) {
     val scope = rememberCoroutineScope()
     val page = state.activePageId?.let { id -> state.session.pages.firstOrNull { it.id == id } }
     val geometry = page?.effectiveGeometry
     if (page == null || geometry == null) {
-        ErrorScreen("A valid manual crop is required before reconstruction.") { scanController.continueScanning() }
+        ErrorScreen("A valid crop is required before reconstruction.") { scanController.continueScanning() }
         return
     }
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF6F7F8)).padding(16.dp)) {
-        Text("Adjust crop", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Drag the large corner handles. Your crop is validated before Rust reconstruction.")
+    Column(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().navigationBarsPadding().padding(16.dp)) {
+        MinimalTopBar("Adjust crop", "Drag a corner, then apply", "Rotate", { scanController.rotatePage(page.id) }, inverse = true)
         Spacer(Modifier.height(12.dp))
         ManualCropEditor(
             geometry = geometry,
             onApply = { corners -> scanController.applyManualCrop(page.id, corners).onSuccess { scope.launch { runCatching { scanController.reconstructPage(page.id) } } } },
             onReset = { scanController.resetToDetectedCrop(page.id) },
             onCancel = { scanController.cancelManualCrop(page.id) },
-            background = { RuntimeImagePreview(page.sourceUri, runtimeImages, Modifier.fillMaxSize(), "Source image for manual crop", page.rotationDegrees) },
-            modifier = Modifier.fillMaxWidth(),
+            background = { RuntimeImagePreview(page.sourceUri, runtimeImages, Modifier.fillMaxSize(), "Original page for crop adjustment", page.rotationDegrees) },
+            modifier = Modifier.fillMaxWidth().weight(1f),
         )
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { scanController.rotatePage(page.id) }) { Text("Rotate 90°") }
-            OutlinedButton(onClick = { scanController.cancelManualCrop(page.id) }) { Text("Back to review") }
-        }
     }
 }
 
 @Composable
-private fun FilterScreen(state: ScannerUiState, options: WellfriendScannerOptions, runtimeImages: NativeRuntimeImageStore, scanController: ScanController, onBack: () -> Unit) {
+private fun FilterScreen(
+    state: ScannerUiState,
+    options: WellfriendScannerOptions,
+    runtimeImages: NativeRuntimeImageStore,
+    scanController: ScanController,
+    onBack: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val active = state.activePageId?.let { id -> state.session.pages.firstOrNull { it.id == id } }
-    var showingOriginal by remember(active?.id) { mutableStateOf(false) }
+    var showingBefore by remember(active?.id) { mutableStateOf(false) }
     if (active == null) {
         ErrorScreen("Choose a page before selecting a filter.", onBack)
         return
     }
-    val previewUri = if (showingOriginal) active.canonicalPage?.uri ?: active.sourceUri else active.displayPage?.uri ?: active.sourceUri
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF6F7F8)).padding(16.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Filters", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(if (showingOriginal) "Before" else "Current: ${active.filter.name.replace('_', ' ')}")
-            }
-            OutlinedButton(onClick = { showingOriginal = !showingOriginal }) { Text(if (showingOriginal) "Show current" else "Compare before") }
+    LaunchedEffect(active.id) {
+        if (active.canonicalPage == null) runCatching { scanController.reconstructPage(active.id) }
+        if (active.filter == FilterPreset.ORIGINAL && options.defaultFilter != FilterPreset.ORIGINAL) runCatching { scanController.applyFilter(active.id, options.defaultFilter) }
+    }
+    val previewUri = if (showingBefore) active.canonicalPage?.uri ?: active.sourceUri else active.displayPage?.uri ?: active.sourceUri
+    Column(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding().navigationBarsPadding().padding(16.dp)) {
+        MinimalTopBar(
+            "Filters",
+            if (showingBefore) "Before" else active.filter.name.replace('_', ' '),
+            if (showingBefore) "Current" else "Before",
+            onAction = { showingBefore = !showingBefore },
+        )
+        Spacer(Modifier.height(12.dp))
+        Card(Modifier.weight(1f).fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1C1A))) {
+            RuntimeImagePreview(previewUri, runtimeImages, Modifier.fillMaxSize().padding(8.dp), rotationDegrees = active.rotationDegrees)
         }
         Spacer(Modifier.height(12.dp))
-        Card(modifier = Modifier.weight(1f).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF20242A))) {
-            RuntimeImagePreview(previewUri, runtimeImages, Modifier.fillMaxSize().padding(10.dp), rotationDegrees = active.rotationDegrees)
-        }
-        Spacer(Modifier.height(12.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(options.filters, key = { it.name }) { preset ->
-                FilterChoice(preset, active.filter == preset) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.filters.forEach { preset ->
+                FilterChip(preset, active.filter == preset) {
                     scope.launch {
                         runCatching {
                             if (active.canonicalPage == null) scanController.reconstructPage(active.id)
                             scanController.applyFilter(active.id, preset)
                         }
-                        showingOriginal = false
+                        showingBefore = false
                     }
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = state.session.pages.size > 1, onClick = { scope.launch { runCatching { scanController.applyFilterToAll(active.filter) } } }) {
-            Text("Apply ${active.filter.name.replace('_', ' ')} to all pages")
+        if (state.session.pages.size > 1) {
+            Spacer(Modifier.height(8.dp))
+            SecondaryAction("Apply ${active.filter.name.replace('_', ' ')} to all pages", modifier = Modifier.fillMaxWidth()) { scope.launch { runCatching { scanController.applyFilterToAll(active.filter) } } }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(10.dp))
         Button(modifier = Modifier.fillMaxWidth(), onClick = onBack) { Text("Done") }
     }
 }
 
 @Composable
-private fun ExportScreen(state: ScannerUiState, options: WellfriendScannerOptions, onBack: () -> Unit, onExportDebug: () -> Unit, onExportPage: (ScanPage, ExportFormat) -> Result<File>) {
+private fun ExportScreen(
+    state: ScannerUiState,
+    options: WellfriendScannerOptions,
+    onBack: () -> Unit,
+    onExportDebug: () -> Unit,
+    onExportPage: (ScanPage, ExportFormat) -> Result<File>,
+) {
     val page = state.activePageId?.let { id -> state.session.pages.firstOrNull { it.id == id } }
     var message by remember { mutableStateOf<String?>(null) }
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF6F7F8)).padding(16.dp)) {
-        Text("Export", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Exports only registered processed pixels. Debug JSON excludes image bytes.")
+    Column(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding().navigationBarsPadding().padding(16.dp)) {
+        MinimalTopBar("Export", "The current page only", "Back", onBack)
+        Spacer(Modifier.height(24.dp))
+        Text("Share a processed image", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Ink)
+        Text("Only native runtime output is exported. Debug JSON does not include image bytes.", color = MutedInk)
         Spacer(Modifier.height(16.dp))
-        if (page != null && options.enabledFeatures.jpegExport && options.enabledFeatures.share) Button(modifier = Modifier.fillMaxWidth(), onClick = { message = onExportPage(page, ExportFormat.JPEG).fold({ "JPEG ready to share: ${it.name}" }, { it.message ?: "JPEG export failed" }) }) { Text("Share JPEG") }
-        if (page != null && options.enabledFeatures.pngExport && options.enabledFeatures.share) OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { message = onExportPage(page, ExportFormat.PNG).fold({ "PNG ready to share: ${it.name}" }, { it.message ?: "PNG export failed" }) }) { Text("Share PNG") }
-        OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { onExportDebug(); message = "Debug JSON saved privately to the app export folder" }) { Text("Export debug JSON") }
-        Card(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text("PDF export: coming soon. No PDF is generated by this scalar reference runtime.", modifier = Modifier.padding(12.dp)) }
-        message?.let { Text(it, modifier = Modifier.padding(top = 12.dp), color = Color(0xFF2B5D45)) }
-        Spacer(Modifier.weight(1f))
-        Button(modifier = Modifier.fillMaxWidth(), onClick = onBack) { Text("Back to review") }
+        if (page != null && options.enabledFeatures.share && options.enabledFeatures.jpegExport) Button(modifier = Modifier.fillMaxWidth(), onClick = { message = onExportPage(page, ExportFormat.JPEG).fold({ "JPEG ready to share" }, { it.message ?: "JPEG export failed" }) }) { Text("Share JPEG") }
+        if (page != null && options.enabledFeatures.share && options.enabledFeatures.pngExport) {
+            Spacer(Modifier.height(8.dp))
+            SecondaryAction("Share PNG", modifier = Modifier.fillMaxWidth()) { message = onExportPage(page, ExportFormat.PNG).fold({ "PNG ready to share" }, { it.message ?: "PNG export failed" }) }
+        }
+        Spacer(Modifier.height(8.dp))
+        SecondaryAction("Export debug JSON", modifier = Modifier.fillMaxWidth(), onClick = { onExportDebug(); message = "Debug JSON exported" })
+        Spacer(Modifier.height(16.dp))
+        Surface(color = Color(0xFFECEDE9), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) { Text("PDF export is not implemented in this scalar reference runtime.", color = MutedInk, modifier = Modifier.padding(14.dp)) }
+        message?.let { Text(it, color = Color(0xFF23613B), modifier = Modifier.padding(top = 14.dp)) }
     }
 }
 
 @Composable
-private fun SettingsScreen(options: WellfriendScannerOptions, onChange: (WellfriendScannerOptions) -> Unit, onBack: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF6F7F8)).padding(16.dp)) {
-        Text("Scanner settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("These controls demonstrate the same host-facing options exposed by the SDK.")
-        Spacer(Modifier.height(12.dp))
-        SettingToggle("Show gallery import", options.enabledFeatures.galleryImport) { onChange(options.copy(enabledFeatures = options.enabledFeatures.copy(galleryImport = it))) }
-        SettingToggle("Show torch", options.enabledFeatures.torch) { onChange(options.copy(enabledFeatures = options.enabledFeatures.copy(torch = it))) }
+private fun SettingsScreen(
+    options: WellfriendScannerOptions,
+    onChange: (WellfriendScannerOptions) -> Unit,
+    onBack: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
+) {
+    Column(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        MinimalTopBar("Scanner settings", "Applied immediately to this session", "Done", onBack)
+        SettingsSection("Appearance")
+        SettingToggle("Floating capture controls", options.theme.controlPlacement == ScannerControlPlacement.FLOATING_CONTROLS) {
+            onChange(options.copy(theme = options.theme.copy(controlPlacement = if (it) ScannerControlPlacement.FLOATING_CONTROLS else ScannerControlPlacement.BOTTOM_BAR)))
+        }
+        Text("Accent", color = MutedInk, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
+            AccentChoice(options.theme, 0xFF41D68AL, "Green", onChange, options)
+            AccentChoice(options.theme, 0xFF5288F2L, "Blue", onChange, options)
+            AccentChoice(options.theme, 0xFFDD7D4AL, "Orange", onChange, options)
+        }
+        SettingsSection("Camera controls")
+        FeatureToggles(options, onChange)
+        SettingsSection("Workflow")
+        SettingToggle("Start with auto capture", options.autoCaptureEnabled) { onChange(options.copy(autoCaptureEnabled = it)) }
         SettingToggle("Manual crop", options.manualCropEnabled) { onChange(options.copy(manualCropEnabled = it)) }
         SettingToggle("Multi-page session", options.multiPageEnabled) { onChange(options.copy(multiPageEnabled = it)) }
-        SettingToggle("Runtime diagnostics entry", options.debugPanelEnabled) { onChange(options.copy(debugPanelEnabled = it)) }
-        Spacer(Modifier.height(16.dp))
-        Text("Enabled filters", fontWeight = FontWeight.Bold)
-        Text(options.filters.joinToString { it.name.replace('_', ' ') })
-        Text("Theme: ${options.theme.mode.name.lowercase()} • controls: ${options.theme.controlPlacement.name.lowercase()}")
-        Spacer(Modifier.weight(1f))
-        Button(modifier = Modifier.fillMaxWidth(), onClick = onBack) { Text("Done") }
+        SettingToggle("Show runtime details", options.debugPanelEnabled) { onChange(options.copy(debugPanelEnabled = it)) }
+        SettingsSection("Filters")
+        FilterPreset.defaultProductFilters.forEach { preset ->
+            SettingToggle(preset.name.replace('_', ' '), preset in options.filters) { enabled -> options.withFilterEnabled(preset, enabled)?.let(onChange) }
+        }
+        Text("Default filter", color = MutedInk, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            options.filters.forEach { preset ->
+                FilterChip(preset, options.defaultFilter == preset) { onChange(options.copy(defaultFilter = preset)) }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        if (options.debugPanelEnabled) SecondaryAction("Open runtime diagnostics", modifier = Modifier.fillMaxWidth(), onClick = onOpenDiagnostics)
     }
 }
 
@@ -389,38 +459,38 @@ private fun SettingsScreen(options: WellfriendScannerOptions, onChange: (Wellfri
 private fun DiagnosticsScreen(state: ScannerUiState, cameraController: CameraXScannerController, onBack: () -> Unit, onExportDebug: () -> Unit) {
     val camera by cameraController.diagnostics.collectAsState()
     val artifact = NativeRuntimeArtifactDiagnostics.snapshot()
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF101419)).padding(16.dp)) {
-        Text("Runtime diagnostics", style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
-        DiagnosticsLine("Runtime", state.analysis?.engineMode?.name ?: "PENDING")
-        DiagnosticsLine("Mock used", if (state.analysis?.engineMode == PerceptionEngineMode.DEV_JVM_MOCK) "true (development only)" else "false")
-        DiagnosticsLine("Artifact SHA", artifact.sourceSha ?: "unavailable")
-        DiagnosticsLine("Artifact schema", artifact.schemaVersion?.toString() ?: "unknown")
-        DiagnosticsLine("Camera bound", camera.useCasesBound.toString())
-        DiagnosticsLine("Preview surface", camera.previewSurfaceAttached.toString())
-        DiagnosticsLine("Frames", camera.frameCount.toString())
-        DiagnosticsLine("Last frame", camera.lastFrame ?: "none")
-        DiagnosticsLine("Guidance", state.guidance.joinToString())
-        DiagnosticsLine("Native status", NativeLibraryLoader.status.diagnostic)
-        camera.lastError?.let { DiagnosticsLine("Camera error", it, Color(0xFFFFB4AB)) }
-        state.error?.let { DiagnosticsLine("Runtime error", it, Color(0xFFFFB4AB)) }
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onExportDebug) { Text("Export debug JSON", color = Color.White) }
-        Button(modifier = Modifier.fillMaxWidth(), onClick = onBack) { Text("Back to scanner") }
+    Column(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        MinimalTopBar("Runtime details", "Technical information", "Done", onBack)
+        Spacer(Modifier.height(12.dp))
+        DiagnosticCard("Runtime", state.analysis?.engineMode?.name ?: "PENDING")
+        DiagnosticCard("Mock used", if (state.analysis?.engineMode == PerceptionEngineMode.DEV_JVM_MOCK) "true (development only)" else "false")
+        DiagnosticCard("Artifact SHA", artifact.sourceSha ?: "unavailable")
+        DiagnosticCard("Camera bound", camera.useCasesBound.toString())
+        DiagnosticCard("Preview surface", camera.previewSurfaceAttached.toString())
+        DiagnosticCard("Frames", camera.frameCount.toString())
+        DiagnosticCard("Last frame", camera.lastFrame ?: "none")
+        DiagnosticCard("Guidance", state.guidance.joinToString())
+        DiagnosticCard("Native loader", NativeLibraryLoader.status.diagnostic)
+        camera.lastError?.let { DiagnosticCard("Camera error", it, Color(0xFF9C2F24)) }
+        state.error?.let { DiagnosticCard("Runtime error", it, Color(0xFF9C2F24)) }
+        Spacer(Modifier.height(8.dp))
+        SecondaryAction("Export debug JSON", modifier = Modifier.fillMaxWidth(), onClick = onExportDebug)
     }
 }
 
 @Composable
 private fun PageStrip(state: ScannerUiState, scanController: ScanController) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        items(state.session.pages, key = { it.id }) { page ->
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        state.session.pages.forEachIndexed { index, page ->
             val selected = page.id == state.activePageId
             Surface(
-                shape = RoundedCornerShape(12.dp), color = if (selected) Color(0xFFDCF8E9) else Color.White,
-                modifier = Modifier.border(1.dp, if (selected) Color(0xFF41A86D) else Color(0xFFCDD3D7), RoundedCornerShape(12.dp)).clickable { scanController.selectReviewPage(page.id) },
+                color = if (selected) Color(0xFFE0F3E7) else Color.White,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.border(1.dp, if (selected) Color(0xFF36885A) else Color(0xFFD8DBD6), RoundedCornerShape(14.dp)).clickable { scanController.selectReviewPage(page.id) },
             ) {
-                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    Text("Page ${state.session.pages.indexOf(page) + 1}", fontWeight = FontWeight.Bold)
-                    Text(page.filter.name.replace('_', ' '), style = MaterialTheme.typography.labelSmall)
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) {
+                    Text("Page ${index + 1}", fontWeight = FontWeight.SemiBold, color = Ink)
+                    Text(page.filter.name.replace('_', ' '), style = MaterialTheme.typography.labelSmall, color = MutedInk)
                 }
             }
         }
@@ -428,52 +498,136 @@ private fun PageStrip(state: ScannerUiState, scanController: ScanController) {
 }
 
 @Composable
-private fun FilterChoice(preset: FilterPreset, selected: Boolean, onSelect: () -> Unit) {
-    val implemented = preset in FilterPreset.defaultProductFilters
+private fun FilterChip(preset: FilterPreset, selected: Boolean, onClick: () -> Unit) {
     Surface(
-        color = if (selected) Color(0xFFDCF8E9) else Color.White, shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.border(1.dp, if (selected) Color(0xFF41A86D) else Color(0xFFCDD3D7), RoundedCornerShape(14.dp)).clickable(enabled = implemented, onClick = onSelect),
+        color = if (selected) Color(0xFF1D5E38) else Color.White,
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.border(1.dp, if (selected) Color(0xFF1D5E38) else Color(0xFFD8DBD6), RoundedCornerShape(18.dp)).clickable(onClick = onClick),
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(preset.name.replace('_', ' '), fontWeight = FontWeight.Medium)
-            Text(if (implemented) "Native scalar" else "Coming soon", style = MaterialTheme.typography.labelSmall)
-        }
+        Text(preset.name.replace('_', ' '), color = if (selected) Color.White else Ink, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
-private fun GuidanceCard(guidance: List<CaptureGuidance>, confidence: Float?) {
-    val text = guidance.firstOrNull()?.let(::guidanceText) ?: "Searching for document"
-    Surface(color = Color(0xDD11161B), shape = RoundedCornerShape(20.dp)) {
-        Text(if (confidence == null) text else "$text • ${(confidence * 100).toInt()}%", color = Color.White, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+private fun GuidancePill(guidance: List<CaptureGuidance>, confidence: Float?) {
+    val text = guidance.firstOrNull()?.let(::guidanceText) ?: "Looking for a document"
+    Surface(color = Color(0xE9151715), shape = RoundedCornerShape(22.dp), modifier = Modifier.widthIn(max = 300.dp)) {
+        Text(text + (confidence?.let { " · ${(it * 100).toInt()}%" } ?: ""), color = Color.White, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
     }
 }
 
 @Composable
 private fun RuntimeChip(state: ScannerUiState, cameraBound: Boolean) {
     val native = state.analysis?.engineMode != PerceptionEngineMode.DEV_JVM_MOCK && NativeLibraryLoader.status.available
-    Surface(color = if (native) Color(0xCC173F2B) else Color(0xCC5F251F), shape = RoundedCornerShape(16.dp)) {
-        Text(if (native) "Native • ${if (cameraBound) "live" else "starting"}" else "Runtime unavailable", color = Color.White, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp), style = MaterialTheme.typography.labelMedium)
+    Surface(color = if (native) Color(0xD9215636) else Color(0xD7793028), shape = RoundedCornerShape(16.dp)) {
+        Text(if (native) if (cameraBound) "Native live" else "Native starting" else "Runtime unavailable", color = Color.White, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
     }
 }
 
 @Composable
-private fun CameraErrorCard(message: String, onRetry: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFDECEA)), modifier = Modifier.padding(top = 12.dp)) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text("Camera preview failed", fontWeight = FontWeight.Bold, color = Color(0xFF8B1E15))
-            Text("Reason: $message")
-            Text("Action: retry the camera or check permission and hardware availability.")
-            Button(onClick = onRetry, modifier = Modifier.padding(top = 8.dp)) { Text("Retry camera") }
+private fun MinimalTopBar(title: String, subtitle: String, action: String, onAction: () -> Unit, inverse: Boolean = false) {
+    val titleColor = if (inverse) Color.White else Ink
+    val subtitleColor = if (inverse) Color(0xFFD3D7D2) else MutedInk
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = titleColor, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = subtitleColor, style = MaterialTheme.typography.labelMedium)
+        }
+        CompactAction(action, onAction)
+    }
+}
+
+@Composable
+private fun CompactAction(label: String, onClick: () -> Unit) {
+    Surface(color = Color(0xD91E211E), contentColor = Color.White, shape = RoundedCornerShape(14.dp), modifier = Modifier.clickable(onClick = onClick)) {
+        Text(label, modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp), style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun SecondaryAction(label: String, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    OutlinedButton(modifier = modifier, enabled = enabled, onClick = onClick) { Text(label, textAlign = TextAlign.Center) }
+}
+
+@Composable
+private fun CameraFailure(message: String, onRetry: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFDEDEA)), modifier = Modifier.padding(top = 10.dp).widthIn(max = 340.dp)) {
+        Column(Modifier.padding(14.dp)) {
+            Text("Camera preview failed", color = Color(0xFF96281E), fontWeight = FontWeight.Bold)
+            Text(message, color = Ink)
+            Spacer(Modifier.height(6.dp))
+            Button(onClick = onRetry) { Text("Retry camera") }
         }
     }
 }
 
-@Composable private fun ControlButton(label: String, onClick: () -> Unit) { OutlinedButton(onClick = onClick) { Text(label, textAlign = TextAlign.Center) } }
-@Composable private fun SettingToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) { Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Text(label, modifier = Modifier.weight(1f)); Switch(checked, onCheckedChange) } }
-@Composable private fun DiagnosticsLine(label: String, value: String, color: Color = Color(0xFFE1E8EC)) { Text("$label: $value", color = color, modifier = Modifier.padding(vertical = 3.dp)) }
-@Composable private fun EmptyReview(onContinueScanning: () -> Unit) { Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Text("No pages in this session"); Button(onClick = onContinueScanning, modifier = Modifier.padding(top = 12.dp)) { Text("Open camera") } } }
-@Composable private fun ErrorScreen(message: String, onBack: () -> Unit) { Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Text(message, textAlign = TextAlign.Center); Button(onClick = onBack, modifier = Modifier.padding(top = 12.dp)) { Text("Back") } } }
+@Composable
+private fun SettingsSection(title: String) { Text(title, color = Ink, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 4.dp)) }
+
+@Composable
+private fun SettingToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Ink, modifier = Modifier.weight(1f))
+        Switch(checked, onCheckedChange)
+    }
+}
+
+@Composable
+private fun AccentChoice(theme: ScannerTheme, value: Long, label: String, onChange: (WellfriendScannerOptions) -> Unit, options: WellfriendScannerOptions) {
+    val selected = theme.accentArgb == value
+    Surface(
+        color = Color(value.toInt()),
+        shape = CircleShape,
+        modifier = Modifier.size(if (selected) 42.dp else 34.dp).border(if (selected) 3.dp else 1.dp, if (selected) Ink else Color.White, CircleShape).clickable { onChange(options.copy(theme = theme.copy(accentArgb = value))) },
+    ) { Text(label.take(1), color = Color.White, modifier = Modifier.wrapContentWidth().padding(8.dp), fontWeight = FontWeight.Bold) }
+}
+
+@Composable
+private fun FeatureToggles(options: WellfriendScannerOptions, onChange: (WellfriendScannerOptions) -> Unit) {
+    val features = options.enabledFeatures
+    fun update(transform: (ScannerFeatureSet) -> ScannerFeatureSet) = onChange(options.copy(enabledFeatures = transform(features)))
+    SettingToggle("Gallery import", features.galleryImport) { enabled -> update { current -> current.copy(galleryImport = enabled) } }
+    SettingToggle("Torch", features.torch) { enabled -> update { current -> current.copy(torch = enabled) } }
+    SettingToggle("Auto capture control", features.autoCapture) { enabled -> update { current -> current.copy(autoCapture = enabled) } }
+    SettingToggle("Manual capture", features.manualCapture) { enabled -> update { current -> current.copy(manualCapture = enabled) } }
+    SettingToggle("Camera switch", features.cameraSwitch) { enabled -> update { current -> current.copy(cameraSwitch = enabled) } }
+    SettingToggle("Share processed pages", features.share) { enabled -> update { current -> current.copy(share = enabled) } }
+    SettingToggle("JPEG export", features.jpegExport) { enabled -> update { current -> current.copy(jpegExport = enabled) } }
+    SettingToggle("PNG export", features.pngExport) { enabled -> update { current -> current.copy(pngExport = enabled) } }
+}
+
+private fun WellfriendScannerOptions.withFilterEnabled(filter: FilterPreset, enabled: Boolean): WellfriendScannerOptions? {
+    val next = if (enabled) (filters + filter).distinct() else filters.filterNot { it == filter }
+    if (next.isEmpty()) return null
+    return copy(filters = next, defaultFilter = if (defaultFilter in next) defaultFilter else next.first())
+}
+
+@Composable
+private fun DiagnosticCard(label: String, value: String, valueColor: Color = Ink) {
+    Surface(color = Color.White, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Column(Modifier.padding(12.dp)) {
+            Text(label, color = MutedInk, style = MaterialTheme.typography.labelMedium)
+            Text(value, color = valueColor, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun EmptyReview(onContinueScanning: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding().navigationBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Text("No scanned pages yet", style = MaterialTheme.typography.titleLarge, color = Ink)
+        Text("Capture or import a document to start a session.", color = MutedInk, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+        Button(onClick = onContinueScanning, modifier = Modifier.padding(top = 16.dp)) { Text("Open camera") }
+    }
+}
+
+@Composable
+private fun ErrorScreen(message: String, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding().navigationBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Text(message, color = Ink, textAlign = TextAlign.Center)
+        Button(onClick = onBack, modifier = Modifier.padding(top = 16.dp)) { Text("Back") }
+    }
+}
 
 private fun guidanceText(guidance: CaptureGuidance): String = when (guidance) {
     CaptureGuidance.NO_DOCUMENT -> "Position a document in view"

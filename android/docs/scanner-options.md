@@ -5,7 +5,7 @@
 | `theme` | Brand name, system/light/dark choice, accent, and control placement preference. |
 | `mode` | Product intent (`DOCUMENT`, `RECEIPT`, `ID_CARD`, `WHITEBOARD`); it does not claim a new detector. |
 | `enabledFeatures` | Torch, gallery import, manual capture, camera switch, sharing, JPEG, and PNG visibility. |
-| `filters` / `defaultFilter` | Filter choices shown to the user. The default must be one of the enabled filters. |
+| `filters` / `defaultFilter` | Filter choices shown to the user. The default must be one of the enabled filters and is selectable in the reference settings screen. |
 | `autoCaptureEnabled` | Shows the auto/manual product mode control. Auto capture remains driven by native readiness evidence. |
 | `manualCropEnabled` | Enables validated four-corner correction. |
 | `multiPageEnabled` | Enables session/review affordances. |
