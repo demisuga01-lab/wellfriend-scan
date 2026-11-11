@@ -33,6 +33,7 @@ class ScanController(
     private val perceptionEngine: PerceptionEngine,
     initialSession: ScanSession = ScanSession(id = "session-${System.currentTimeMillis()}"),
 ) {
+    @Volatile private var autoCaptureArmed = false
     private val mutableState = MutableStateFlow(ScannerUiState(session = initialSession))
     val state: StateFlow<ScannerUiState> = mutableState.asStateFlow()
 
@@ -44,7 +45,14 @@ class ScanController(
         if (granted) transition(ScannerState.CAMERA_STARTING) else fail("camera permission denied")
     }
 
-    fun onCameraStarted() = transition(ScannerState.SEARCHING_FOR_DOCUMENT)
+    fun onCameraStarted() {
+        if (mutableState.value.state in setOf(ScannerState.CAMERA_STARTING, ScannerState.SEARCHING_FOR_DOCUMENT)) {
+            transition(ScannerState.SEARCHING_FOR_DOCUMENT)
+        }
+    }
+
+    fun setAutoCaptureArmed(armed: Boolean) { autoCaptureArmed = armed }
+    fun isAutoCaptureArmed(): Boolean = autoCaptureArmed
 
     fun onCameraFailure(message: String) = fail(message)
     fun onGalleryImportFailure(message: String) = fail(message)
@@ -53,6 +61,9 @@ class ScanController(
     suspend fun analyzeFrame(frame: PerceptionFrame): FrameAnalysisResult {
         return try {
             val result = perceptionEngine.analyzeFrame(frame)
+            // CameraX can deliver one more frame while ImageCapture is writing. Preserve the
+            // capture transaction instead of letting a late analysis move the product back to READY.
+            if (mutableState.value.state == ScannerState.CAPTURING) return result
             val next = when (result.captureReadiness) {
                 CaptureReadiness.NOT_READY -> if (result.overlayGeometry == null) {
                     ScannerState.SEARCHING_FOR_DOCUMENT
@@ -78,6 +89,7 @@ class ScanController(
     /** Auto mode only proceeds when the perception engine returns CaptureNow. */
     fun requestCapture(mode: CaptureMode): Boolean {
         val analysis = mutableState.value.analysis
+        if (mutableState.value.state == ScannerState.CAPTURING) return false
         if (mode == CaptureMode.AUTO && analysis?.captureReadiness != CaptureReadiness.CAPTURE_NOW) return false
         mutableState.value = mutableState.value.copy(
             state = ScannerState.CAPTURING,
@@ -118,8 +130,19 @@ class ScanController(
     }
 
     fun beginManualCrop(pageId: String) {
-        ensurePage(pageId)
-        mutableState.value = mutableState.value.copy(state = ScannerState.EDITING_CROP, activePageId = pageId)
+        val current = mutableState.value
+        val page = ScanSessionReducer.page(current.session, pageId)
+        // This is a manual full-image starting frame, not a detector fallback. The user must still
+        // adjust or accept it, and PageGeometry validates it before reconstruction.
+        val initialized = if (page.effectiveGeometry == null) page.copy(
+            manualGeometry = fullImageManualGeometry(page.sourceSize),
+            diagnostics = page.diagnostics + "manual_crop_initialized_to_source_bounds",
+        ) else page
+        mutableState.value = current.copy(
+            state = ScannerState.EDITING_CROP,
+            activePageId = pageId,
+            session = ScanSessionReducer.updatePage(current.session, initialized),
+        )
     }
 
     /** Manual geometry is validated and labeled before it can enter reconstruction. */
@@ -143,7 +166,11 @@ class ScanController(
     fun resetToDetectedCrop(pageId: String) {
         val current = mutableState.value
         val page = ScanSessionReducer.page(current.session, pageId)
-        val changed = page.copy(manualGeometry = null, diagnostics = page.diagnostics + "manual_geometry_reset")
+        val changed = if (page.detectedGeometry != null) {
+            page.copy(manualGeometry = null, diagnostics = page.diagnostics + "manual_geometry_reset_to_detected")
+        } else {
+            page.copy(manualGeometry = fullImageManualGeometry(page.sourceSize), diagnostics = page.diagnostics + "manual_geometry_reset_to_source_bounds")
+        }
         mutableState.value = current.copy(session = ScanSessionReducer.updatePage(current.session, changed))
     }
 
@@ -206,6 +233,7 @@ class ScanController(
             val latest = mutableState.value
             val changed = ScanSessionReducer.page(latest.session, pageId).copy(
                 filter = preset,
+                filteredPage = result.outputSize?.let { CanonicalPagePreview(result.outputUri, it, result.diagnostics) },
                 processingStatus = ProcessingStatus.COMPLETE,
                 diagnostics = page.diagnostics + result.diagnostics,
             )
@@ -221,6 +249,18 @@ class ScanController(
     }
 
     fun rotatePage(pageId: String) = updateSession { ScanSessionReducer.rotatePage(it, pageId) }
+    fun continueScanning() = transition(ScannerState.SEARCHING_FOR_DOCUMENT)
+    fun retakePage(pageId: String) {
+        deletePage(pageId)
+        continueScanning()
+    }
+
+    suspend fun applyFilterToAll(preset: FilterPreset) {
+        val pageIds = mutableState.value.session.pages.map { it.id }
+        pageIds.forEach { pageId ->
+            if (mutableState.value.session.pages.any { it.id == pageId }) applyFilter(pageId, preset)
+        }
+    }
     fun deletePage(pageId: String) {
         val current = mutableState.value
         val session = ScanSessionReducer.deletePage(current.session, pageId)
@@ -255,4 +295,16 @@ class ScanController(
     private fun fail(message: String) {
         mutableState.value = mutableState.value.copy(state = ScannerState.ERROR, error = message)
     }
+
+    private fun fullImageManualGeometry(size: ImageSize): PageGeometry = PageGeometry(
+        corners = listOf(
+            Point2D(0f, 0f),
+            Point2D(size.width.toFloat(), 0f),
+            Point2D(size.width.toFloat(), size.height.toFloat()),
+            Point2D(0f, size.height.toFloat()),
+        ),
+        imageSize = size,
+        confidence = 1f,
+        source = GeometrySource.MANUAL,
+    )
 }

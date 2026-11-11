@@ -1,6 +1,6 @@
 # Wellfriend Scan
 
-MP10B adds reproducible local/CI runtime artifacts: Android delegates to the Rust C ABI through JNI when verified arm64-v8a/x86_64 libraries are synced, and web delegates to a verified local WASM package in its worker. Missing release runtimes fail closed; test/dev mocks remain visibly non-production.
+MP11 validates the real scalar runtime route: Android CameraX sends compact crop-aware Gray8 frames to the Rust C ABI through JNI when verified arm64-v8a/x86_64 libraries are synced; web decodes uploads/camera frames to raw RGBA and calls a verified local WASM package in its worker. Missing production runtimes fail closed; test/dev mocks remain visibly non-production.
 
 `wellfriend-scan` is the reference document-scanner product shell for Android, web, and desktop surfaces. It owns product UI, capture lifecycle, user sessions, and export orchestration. It is not a duplicate perception engine: reusable quality, detection, fusion, reconstruction, restoration, and semantic algorithms belong in [`wellfriend-perception`](https://github.com/demisuga01-lab/wellfriend-perception).
 
@@ -19,6 +19,6 @@ npm run verify:dependencies
 npm run verify:runtime-artifacts
 ```
 
-The Android reference app requires a local Android SDK, JDK 17, and Gradle 8.7+ (or a generated wrapper). See [android/README.md](android/README.md).
+The Android reference app requires a local Android SDK and JDK 17. The committed Gradle 8.7 wrapper verifies the official distribution checksum. See [Android build instructions](android/docs/building.md) and the [device smoke checklist](android/docs/device-smoke-test.md).
 
-Current status: MP7 adds the modular Android reference scanner. MP8 adds a browser scanner with safe import, optional webcam, worker transport, canvas crop/overlay, shared sessions, diagnostics, and debug JSON export; it also adds a tested desktop local file/folder workflow contract. MP10B packages the scalar Rust runtime locally/through CI artifacts, but this is not real-device validation or a production-quality claim. No ML Kit scanner dependency is required. See [android/native artifacts](android/docs/native-artifacts.md), [web/WASM artifacts](web/docs/wasm-artifacts.md), [web/README.md](web/README.md), and [desktop/README.md](desktop/README.md).
+Current status: MP7 adds the modular Android reference scanner. MP8 adds a browser scanner with safe import, optional webcam, worker transport, canvas crop/overlay, shared sessions, diagnostics, and debug JSON export; it also adds a tested desktop local file/folder workflow contract. MP11 adds host-validated real scalar WASM analysis/reconstruction/filtering and Android CameraX crop/stride calibration coverage. Physical-device and physical-browser-camera validation remain a documented manual gate, not a production-quality claim. No ML Kit scanner dependency is required. See [android/native artifacts](android/docs/native-artifacts.md), [web/WASM artifacts](web/docs/wasm-artifacts.md), [browser smoke](web/docs/real-wasm-browser-smoke.md), and [desktop/README.md](desktop/README.md).

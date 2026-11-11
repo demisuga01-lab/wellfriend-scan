@@ -11,6 +11,7 @@ import dev.wellfriend.scan.core.PreviewCoordinateMapper
 import dev.wellfriend.scan.core.PreviewScaleMode
 import dev.wellfriend.scan.core.PreviewSize
 import dev.wellfriend.scan.core.ScanSession
+import dev.wellfriend.scan.core.ScannerState
 import dev.wellfriend.scan.export.ExportFormat
 import dev.wellfriend.scan.export.ExportRequest
 import dev.wellfriend.scan.export.ScanExporter
@@ -104,6 +105,26 @@ class ScannerIntegrationTest {
         controller.analyzeFrame(frame())
         assertEquals(CaptureGuidance.HOLD_STEADY, controller.state.value.guidance.single())
         assertFalse(controller.requestCapture(CaptureMode.AUTO))
+    }
+
+    @Test fun `manual crop safely starts from source bounds when no detector geometry exists`() = runBlocking {
+        val controller = ScanController(NoDocumentEngine())
+        val page = controller.onPhotoCaptured("file:///manual.jpg", ImageSize(100, 200))
+        controller.beginManualCrop(page.id)
+        val initialized = controller.state.value.session.pages.single()
+        assertEquals(ScannerState.EDITING_CROP, controller.state.value.state)
+        assertEquals(GeometrySource.MANUAL, initialized.manualGeometry?.source)
+        assertEquals(listOf(0f, 100f, 100f, 0f), initialized.manualGeometry?.corners?.map { it.x })
+    }
+
+    @Test fun `auto capture cannot enqueue duplicate captures while a capture is active`() = runBlocking {
+        val controller = ScanController(RecordingEngine())
+        controller.analyzeFrame(frame())
+        controller.setAutoCaptureArmed(true)
+        assertTrue(controller.isAutoCaptureArmed())
+        assertTrue(controller.requestCapture(CaptureMode.AUTO))
+        assertFalse(controller.requestCapture(CaptureMode.AUTO))
+        assertEquals(ScannerState.CAPTURING, controller.state.value.state)
     }
 }
 

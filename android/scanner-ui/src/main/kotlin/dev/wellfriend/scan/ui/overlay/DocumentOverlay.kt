@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -82,6 +83,7 @@ fun ManualCropEditor(
     onApply: (List<Point2D>) -> Unit,
     onReset: () -> Unit,
     onCancel: () -> Unit,
+    background: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var corners by remember(geometry) { mutableStateOf(geometry.corners) }
@@ -97,11 +99,12 @@ fun ManualCropEditor(
     }
     var activeCorner by remember { mutableStateOf<Int?>(null) }
     Column(modifier = modifier) {
-        Box(modifier = Modifier.fillMaxWidth().height(360.dp).background(Color.DarkGray)) {
+        Box(modifier = Modifier.fillMaxWidth().height(460.dp).background(Color(0xFF20242A))) {
+            background()
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(360.dp)
+                    .height(460.dp)
                     .onSizeChanged { canvasSize = it }
                     .pointerInput(corners, mapper) {
                         detectDragGestures(
@@ -135,14 +138,18 @@ fun ManualCropEditor(
                     close()
                 }
                 drawPath(path, Color(0xFF41D68A), style = androidx.compose.ui.graphics.drawscope.Stroke(5f))
-                points.forEach { drawCircle(Color.White, 12f, Offset(it.x, it.y)) }
+                points.forEach {
+                    drawCircle(Color(0xFF101214), 24f, Offset(it.x, it.y))
+                    drawCircle(Color.White, 16f, Offset(it.x, it.y))
+                    drawCircle(Color(0xFF41D68A), 9f, Offset(it.x, it.y))
+                }
             }
         }
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            Button(onClick = onReset) { Text("Reset") }
+            Button(onClick = onReset) { Text("Fit to document") }
             Button(onClick = { onApply(corners) }) { Text("Apply crop") }
             Button(onClick = onCancel) { Text("Cancel") }
         }

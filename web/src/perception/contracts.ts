@@ -21,4 +21,5 @@ export interface FilterRequest { readonly pageId: string; readonly inputUri: str
 export interface FilterResult { readonly outputUri: string; readonly appliedProcessorIds: readonly string[]; readonly diagnostics: readonly string[]; readonly engineMode: PerceptionEngineMode; }
 
 /** The only web-to-perception boundary; UI/session code cannot implement algorithms. */
-export interface WebPerceptionEngine { readonly mode: PerceptionEngineMode; analyzeFrame(frame: PerceptionFrame): Promise<FrameAnalysisResult>; reconstructPage(request: ReconstructionRequest): Promise<ReconstructionResult>; applyFilter(request: FilterRequest): Promise<FilterResult>; dispose?(): void; }
+export interface RuntimeSourceImage { readonly width: number; readonly height: number; readonly stride: number; readonly pixelFormat: string; readonly bytes: Uint8Array; }
+export interface WebPerceptionEngine { readonly mode: PerceptionEngineMode; analyzeFrame(frame: PerceptionFrame): Promise<FrameAnalysisResult>; reconstructPage(request: ReconstructionRequest): Promise<ReconstructionResult>; applyFilter(request: FilterRequest): Promise<FilterResult>; registerSourceImage?(uri: string, image: RuntimeSourceImage): Promise<void>; dispose?(): void; }

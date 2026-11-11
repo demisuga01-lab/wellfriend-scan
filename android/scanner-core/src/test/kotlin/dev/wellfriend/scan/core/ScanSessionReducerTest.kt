@@ -30,4 +30,19 @@ class ScanSessionReducerTest {
         assertTrue(PageGeometry.validate(List(4) { Point2D(0f, 0f) }, size, 1f, GeometrySource.MANUAL).isFailure)
         assertFailsWith<IllegalArgumentException> { PageGeometry(List(3) { Point2D(0f, 0f) }, size, 1f, GeometrySource.MANUAL) }
     }
+
+    @Test fun `scanner options keep host feature and filter choices explicit`() {
+        val options = WellfriendScannerOptions(
+            enabledFeatures = ScannerFeatureSet(torch = false, galleryImport = false),
+            filters = listOf(FilterPreset.ORIGINAL, FilterPreset.GRAYSCALE),
+            defaultFilter = FilterPreset.GRAYSCALE,
+            multiPageEnabled = false,
+        )
+        assertEquals(FilterPreset.GRAYSCALE, options.defaultFilter)
+        assertTrue(!options.enabledFeatures.torch)
+        assertTrue(!options.multiPageEnabled)
+        assertFailsWith<IllegalArgumentException> {
+            WellfriendScannerOptions(filters = listOf(FilterPreset.ORIGINAL), defaultFilter = FilterPreset.CLEAN)
+        }
+    }
 }

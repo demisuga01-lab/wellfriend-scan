@@ -49,6 +49,13 @@ enum class FilterPreset {
     BOOK,
     WHITEBOARD,
     PHOTO_DOCUMENT,
+    ;
+
+    companion object {
+        val defaultProductFilters: List<FilterPreset> = listOf(
+            ORIGINAL, AUTO, CLEAN, COLOR, GRAYSCALE, BLACK_AND_WHITE,
+        )
+    }
 }
 
 enum class PageState { DRAFT, CAPTURING, RECONSTRUCTING, READY, FAILED }
@@ -126,6 +133,8 @@ data class ScanPage(
     val detectedGeometry: PageGeometry? = null,
     val manualGeometry: PageGeometry? = null,
     val canonicalPage: CanonicalPagePreview? = null,
+    /** The most recent native filter output. The canonical reconstruction remains available for revert/compare. */
+    val filteredPage: CanonicalPagePreview? = null,
     val filter: FilterPreset = FilterPreset.ORIGINAL,
     val rotationDegrees: Int = 0,
     val state: PageState = PageState.DRAFT,
@@ -137,6 +146,7 @@ data class ScanPage(
     }
 
     val effectiveGeometry: PageGeometry? get() = manualGeometry ?: detectedGeometry
+    val displayPage: CanonicalPagePreview? get() = filteredPage ?: canonicalPage
 }
 
 data class ExportOptions(

@@ -15,6 +15,7 @@ object NativeRuntimeArtifactContract {
     fun validate(manifestJson: String, checksumsJson: String): Result<String> = runCatching {
         require(Regex("\\\"schema_version\\\"\\s*:\\s*1").containsMatchIn(manifestJson)) { "unsupported artifact manifest schema" }
         require(Regex("\\\"artifact_kind\\\"\\s*:\\s*\\\"wellfriend-android-abi\\\"").containsMatchIn(manifestJson)) { "unexpected artifact kind" }
+        require(Regex("\\\"page_size_alignment_bytes\\\"\\s*:\\s*16384").containsMatchIn(manifestJson)) { "16 KiB native page-size declaration missing" }
         val sha = Regex("\\\"source_sha\\\"\\s*:\\s*\\\"([0-9a-f]{40})\\\"").find(manifestJson)?.groupValues?.get(1)
             ?: error("missing source SHA")
         requiredLibraries.forEach { library ->
@@ -24,4 +25,21 @@ object NativeRuntimeArtifactContract {
         require(Regex("[0-9a-f]{64}").containsMatchIn(checksumsJson)) { "checksum digest missing" }
         sha
     }
+}
+
+/** Process-local, non-sensitive artifact metadata displayed by the product debug panel. */
+data class NativeRuntimeArtifactMetadata(val sourceSha: String?, val schemaVersion: Int?, val warning: String?)
+
+object NativeRuntimeArtifactDiagnostics {
+    @Volatile private var metadata = NativeRuntimeArtifactMetadata(null, null, "native runtime artifact manifest has not been loaded")
+
+    fun configure(manifestJson: String, checksumsJson: String) {
+        metadata = NativeRuntimeArtifactContract.validate(manifestJson, checksumsJson)
+            .fold(
+                onSuccess = { NativeRuntimeArtifactMetadata(it, 1, null) },
+                onFailure = { NativeRuntimeArtifactMetadata(null, null, it.message ?: "native runtime artifact validation failed") },
+            )
+    }
+
+    fun snapshot(): NativeRuntimeArtifactMetadata = metadata
 }

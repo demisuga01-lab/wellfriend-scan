@@ -1,4 +1,4 @@
-import type { FilterRequest, FilterResult, FrameAnalysisResult, PerceptionFrame, ReconstructionRequest, ReconstructionResult, WebPerceptionEngine } from "./contracts.js";
+import type { FilterRequest, FilterResult, FrameAnalysisResult, PerceptionFrame, ReconstructionRequest, ReconstructionResult, RuntimeSourceImage, WebPerceptionEngine } from "./contracts.js";
 import type { WorkerRequest, WorkerResponse } from "../workers/protocol.js";
 import type { CaptureGuidance, CaptureReadiness, PageGeometry } from "../../../shared/src/scan-session.js";
 
@@ -6,6 +6,7 @@ type WorkerRequestPayload =
   | { readonly type: "ANALYZE_FRAME"; readonly frame: PerceptionFrame }
   | { readonly type: "RECONSTRUCT_PAGE"; readonly request: ReconstructionRequest }
   | { readonly type: "APPLY_FILTER"; readonly request: FilterRequest }
+  | { readonly type: "REGISTER_IMAGE"; readonly uri: string; readonly image: RuntimeImage }
   | { readonly type: "CANCEL_JOB" | "PING" | "LOAD_WASM" };
 
 /** Browser-worker transport adapter. It moves bytes off the UI thread without owning algorithms. */
@@ -19,6 +20,7 @@ export class WorkerPerceptionEngine implements WebPerceptionEngine {
   async analyzeFrame(frame: PerceptionFrame): Promise<FrameAnalysisResult> { const response = await this.send({ type: "ANALYZE_FRAME", frame }); if (response.type !== "ANALYSIS_RESULT") throw new Error("unexpected worker analysis response"); return response.result; }
   async reconstructPage(request: ReconstructionRequest): Promise<ReconstructionResult> { const response = await this.send({ type: "RECONSTRUCT_PAGE", request }); if (response.type !== "RECONSTRUCTION_RESULT") throw new Error("unexpected worker reconstruction response"); return response.result; }
   async applyFilter(request: FilterRequest): Promise<FilterResult> { const response = await this.send({ type: "APPLY_FILTER", request }); if (response.type !== "FILTER_RESULT") throw new Error("unexpected worker filter response"); return response.result; }
+  async registerSourceImage(uri: string, image: RuntimeSourceImage): Promise<void> { const response = await this.send({ type: "REGISTER_IMAGE", uri, image }); if (response.type !== "IMAGE_REGISTERED") throw new Error("unexpected worker image registration response"); }
   async loadWasm(): Promise<void> { const response = await this.send({ type: "LOAD_WASM" }); if (response.type !== "ENGINE_READY") throw new Error("unexpected worker WASM load response"); }
   dispose(): void { this.rejectAll(new Error("perception worker disposed")); this.worker.terminate(); }
 }
@@ -33,6 +35,14 @@ export interface WasmRuntimeModule { createEngine(configJson?: string): WasmRunt
 export interface RuntimeImage { readonly width: number; readonly height: number; readonly stride: number; readonly pixelFormat: string; readonly bytes: Uint8Array; }
 /** Resolves original/canonical pixels by URI; UI owns storage, Rust owns algorithms. */
 export interface RuntimeImageResolver { resolve(uri: string, declaredSize: { readonly width: number; readonly height: number }): Promise<RuntimeImage>; }
+interface RuntimeImageRegistry extends RuntimeImageResolver { register(uri: string, image: RuntimeImage): void; }
+
+/** Mutable worker-local source cache; images are registered explicitly from the product shell. */
+export class WorkerRuntimeImageStore implements RuntimeImageResolver {
+  private readonly images = new Map<string, RuntimeImage>();
+  register(uri: string, image: RuntimeImage): void { if (!uri || image.width < 1 || image.height < 1 || image.stride < image.width) throw new Error("invalid runtime image registration"); this.images.set(uri, image); }
+  async resolve(uri: string, declaredSize: { readonly width: number; readonly height: number }): Promise<RuntimeImage> { const image = this.images.get(uri); if (!image) throw new Error("runtime source image is not registered; no fallback decoder is allowed"); if (declaredSize.width > 1 && declaredSize.height > 1 && (image.width !== declaredSize.width || image.height !== declaredSize.height)) throw new Error("runtime source image dimensions do not match request"); return image; }
+}
 
 /** Real WASM adapter. It fails closed when no reviewed package or source image resolver is supplied. */
 export class WasmPerceptionEngine implements WebPerceptionEngine {
@@ -60,7 +70,16 @@ export class WasmPerceptionEngine implements WebPerceptionEngine {
   }
   output(uri: string): RuntimeImage | undefined { return this.outputs.get(uri); }
   private requireResolver(): RuntimeImageResolver { if (!this.resolver) throw new Error("WASM runtime requires a reviewed source-image resolver; no mock fallback is allowed"); return this.resolver; }
-  private store(image: RuntimeImage): string { const uri = `wellfriend-runtime://${++this.outputCounter}`; this.outputs.set(uri, image); return uri; }
+  private store(image: RuntimeImage): string {
+    const uri = `wellfriend-runtime://${++this.outputCounter}`;
+    this.outputs.set(uri, image);
+    if (isRuntimeImageRegistry(this.resolver)) this.resolver.register(uri, image);
+    return uri;
+  }
+}
+
+function isRuntimeImageRegistry(value: RuntimeImageResolver | undefined): value is RuntimeImageRegistry {
+  return !!value && typeof (value as Partial<RuntimeImageRegistry>).register === "function";
 }
 
 function inferRawPixelFormat(bytes: Uint8Array, width: number, height: number): { pixelFormat: string; stride: number } {
